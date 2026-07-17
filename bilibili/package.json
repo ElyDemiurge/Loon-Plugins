@@ -1,0 +1,9 @@
+{
+  "name": "bilibili-loon-cleaner",
+  "private": true,
+  "scripts": {
+    "build": "node build_bilibili_cleaner.js",
+    "check:build": "node build_bilibili_cleaner.js --check",
+    "test": "node build_bilibili_cleaner.js --check && node --check bilibili_cleaner.js && node --check testcases/test_context.js && node --check testcases/run_bilibili_cleaner_tests.js && node testcases/run_bilibili_cleaner_tests.js"
+  }
+}

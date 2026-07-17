@@ -1,0 +1,9 @@
+.DS_Store
+*.zip
+*_raw
+*_raw.txt
+*_raw.bin
+
+# 抓包样本不进入远程仓库。
+[0-9][0-9][0-9]_*/
+packets/
