@@ -3,20 +3,20 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-// 测试目录根路径与主脚本路径。
+// Resolve the project root and primary script path.
 const ROOT = path.resolve(__dirname, "..");
 const SCRIPT_PATH = path.join(ROOT, "bilibili_cleaner.js");
 const LPX_PATH = path.join(ROOT, "bilibili_cleaner.lpx");
 const LAN_LPX_PATH = path.join(ROOT, "bilibili_cleaner.lan.lpx");
 
-// 和主脚本保持一致的持久化存储 key。
+// Persistent-store key shared with the primary script.
 const TAG_CACHE_KEY = "BilibiliFilter.tagCache.v1";
 
-// 被测主脚本源码。
+// Primary script source under test.
 const source = fs.readFileSync(SCRIPT_PATH, "utf8");
 
 /* -------------------------------------------------------------------------- */
-/* 测试样本与基础工具                                                         */
+/* Test fixtures and helpers                                                  */
 /* -------------------------------------------------------------------------- */
 
 function parseFeedBody(body) {
@@ -152,21 +152,23 @@ async function runPlugin({
   url = "https://app.bilibili.com/x/v2/feed/index?test=1",
   body,
   bodyBytes,
+  omitResponseBody = false,
   requestOnly = false,
   argument = notifyingArgument(),
   store = {},
   httpClientGet,
 } = {}) {
-  // 记录脚本执行侧的输出，供断言使用。
+  // Capture script-side outputs for assertions.
   const notifications = [];
   const logs = [];
   const httpCalls = [];
 
-  // 脚本最终返回的响应对象。
+  // Capture the final response returned by the script.
   let doneCalled = false;
   let doneResult;
+  let donePatch;
 
-  // 对应被测脚本的异步生命周期。
+  // Track the asynchronous lifecycle of the script under test.
   const donePromise = new Promise((resolve) => {
     const context = {
       console: {
@@ -212,14 +214,28 @@ async function runPlugin({
       $done(result) {
         if (doneCalled) return;
         doneCalled = true;
-        doneResult = result;
-        resolve(result);
+        donePatch = result || {};
+        if (requestOnly) {
+          doneResult = result?.response ? result : { response: result?.response };
+        } else {
+          // Emulate Loon response patches: omitted fields preserve the original response.
+          const responsePatch = result?.response || result || {};
+          const response = { ...context.$response, ...responsePatch };
+          // Keep bodyBytes as a test-only alias while exercising Loon's documented body field.
+          if (ArrayBuffer.isView(response.body)) response.bodyBytes = response.body;
+          doneResult = { response };
+        }
+        resolve(doneResult);
       },
     };
     if (!requestOnly) {
-      context.$response = bodyBytes === undefined
-        ? { body: body === undefined ? feedFixtureBody() : body }
-        : { bodyBytes };
+      context.$response = omitResponseBody
+        ? {}
+        : {
+          body: bodyBytes === undefined
+            ? (body === undefined ? feedFixtureBody() : body)
+            : bodyBytes,
+        };
     } else if (bodyBytes !== undefined) {
       context.$request.bodyBytes = bodyBytes;
     } else if (body !== undefined) {
@@ -229,12 +245,12 @@ async function runPlugin({
     vm.runInNewContext(source, context, { filename: SCRIPT_PATH, timeout: 10000 });
   });
 
-  // 防止测试卡死。
+  // Prevent a stalled plugin from hanging the test suite.
   const timeout = new Promise((_, reject) => {
     setTimeout(() => reject(new Error("plugin did not call $done within timeout")), 5000);
   });
 
-  // 用于判断并发请求是否真的并发执行了。
+  // Record elapsed time so concurrency tests can verify parallel execution.
   const startedAt = Date.now();
   await Promise.race([donePromise, timeout]);
 
@@ -245,6 +261,7 @@ async function runPlugin({
     logs,
     httpCalls,
     store,
+    donePatch,
     elapsedMs: Date.now() - startedAt,
   };
 }
@@ -257,6 +274,14 @@ function assertNotification(result, subtitle) {
     assert.equal(result.notifications[0].subtitle, subtitle);
   }
   return result.notifications[0];
+}
+
+function assertUnchangedResponse(result) {
+  assert.deepEqual(Object.keys(result.donePatch), []);
+}
+
+function assertBodyOnlyResponsePatch(result) {
+  assert.deepEqual(Object.keys(result.donePatch), ["body"]);
 }
 
 function findNotification(result, subtitle) {
@@ -351,7 +376,7 @@ function encodeGrpc(payload) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* protobuf / gRPC 测试样本生成                                               */
+/* Protobuf and gRPC fixture generation                                       */
 /* -------------------------------------------------------------------------- */
 
 function homePopularCard({ title, up, aid }) {
@@ -446,6 +471,51 @@ function viewFixtureBody({ includeLive = true, includeUpGoods = true, includeTag
   return encodeGrpc(Buffer.concat(fields));
 }
 
+function ipadLegacyRelatedItem({ aid, title, up, marker = "" }) {
+  const fields = [
+    varintField(1, aid),
+    stringField(3, title),
+    messageField(4, [stringField(2, up)]),
+    stringField(9, `bilibili://video/${aid}`),
+  ];
+  if (marker) fields.push(stringField(50, marker));
+  return fields;
+}
+
+function ipadLegacyViewFixtureBody() {
+  return encodeGrpc(Buffer.concat([
+    messageField(1, [
+      varintField(1, 8001),
+      stringField(3, "iPadOS 当前视频"),
+    ]),
+    messageField(5, [
+      stringField(2, "iPad测试Tag"),
+      stringField(7, "bilibili://search?keyword=iPad%E6%B5%8B%E8%AF%95Tag"),
+    ]),
+    messageField(10, ipadLegacyRelatedItem({
+      aid: 8101,
+      title: "iPadOS 普通相关推荐",
+      up: "iPadOS 普通UP",
+    })),
+    messageField(10, ipadLegacyRelatedItem({
+      aid: 8102,
+      title: "iPadOS 广告相关推荐",
+      up: "广告UP",
+      marker: "type.googleapis.com/bilibili.ad.v1.AdContentDto 我为什么会看到此广告 ad-complain",
+    })),
+    messageField(10, ipadLegacyRelatedItem({
+      aid: 8103,
+      title: "iPadOS 直播相关推荐",
+      up: "直播UP",
+      marker: "bilibili://live/12345 /bfs/live/new_room_cover/ipad.jpg 直播间",
+    })),
+    messageField(41, [
+      stringField(1, "type.googleapis.com/bilibili.ad.v1.SourceContentDto"),
+      stringField(2, "iPadOS 独立广告素材"),
+    ]),
+  ]));
+}
+
 function relatesFeedFixtureBody() {
   return encodeGrpc(Buffer.concat([
     messageField(1, [adRelatedItem("广告卡片 B")]),
@@ -463,6 +533,56 @@ function videoFeedFixtureBody() {
         { card_goto: "ad_av", title: "信息流广告 A", ad_info: { creative_content: { title: "信息流广告 A" } } },
         { card_goto: "live", uri: "bilibili://live/12345", title: "正在直播", owner: { name: "直播占位账号" } },
         { card_goto: "av", uri: "bilibili://video/9101", title: "普通直播标题 A", owner: { name: "普通占位账号" }, args: { aid: "9101" } },
+      ],
+    },
+  });
+}
+
+function ipadHomeFeedFixtureBody() {
+  return JSON.stringify({
+    code: 0,
+    data: {
+      items: [
+        {
+          card_type: "banner_ipad_v8",
+          card_goto: "banner",
+          title: "iPadOS Banner",
+          banner_item: [{ id: 1 }],
+        },
+        {
+          card_type: "large_cover_v1",
+          card_goto: "av",
+          title: "iPadOS 普通视频 A",
+          args: { aid: "8201", up_name: "iPadOS UP-A" },
+        },
+        {
+          card_type: "large_cover_v1",
+          card_goto: "av",
+          title: "iPadOS 普通视频 B",
+          args: { aid: "8202", up_name: "iPadOS UP-B" },
+        },
+        {
+          card_type: "cm_v1",
+          card_goto: "ad_av",
+          title: "iPadOS 推广视频",
+          ad_info: {
+            creative_content: { video_id: "8203", title: "iPadOS 推广视频" },
+          },
+        },
+        {
+          card_type: "cm_v1",
+          card_goto: "ad_web_s",
+          title: "iPadOS 网页广告",
+          ad_info: {
+            creative_content: { url: "https://ads.example.test/ipad" },
+          },
+        },
+        {
+          card_type: "small_cover_v9",
+          card_goto: "live",
+          title: "iPadOS 直播卡片",
+          uri: "bilibili://live/8204",
+        },
       ],
     },
   });
@@ -690,6 +810,22 @@ function startupTabFixtureBody() {
   });
 }
 
+function ipadStartupTabFixtureBody() {
+  return JSON.stringify({
+    code: 0,
+    message: "OK",
+    data: {
+      tab: [
+        { id: 39, name: "直播", tab_id: "直播tab", uri: "bilibili://live/home", pos: 1 },
+        { id: 40, name: "推荐", tab_id: "推荐tab", uri: "bilibili://pegasus/promo", pos: 2 },
+        { id: 41, name: "热门", tab_id: "hottopic", uri: "bilibili://pegasus/hottopic", pos: 3 },
+        { id: 3502, name: "追番", tab_id: "bangumi", uri: "bilibili://pgc/home", pos: 4 },
+        { id: 3503, name: "影视", tab_id: "bilibili://pgc/cinema-tab", uri: "bilibili://pgc/cinema-tab", pos: 5 },
+      ],
+    },
+  });
+}
+
 function startupSkinFixtureBody() {
   return JSON.stringify({
     code: 0,
@@ -803,6 +939,74 @@ function minePageFixtureBody() {
           title: "今天过得怎么样",
           button_text: "发布",
         },
+      },
+    },
+  });
+}
+
+function ipadMinePageFixtureBody() {
+  return JSON.stringify({
+    code: 0,
+    message: "OK",
+    ttl: 1,
+    data: {
+      name: "iPadOS 占位用户",
+      ipad_sections: [
+        { id: 1, title: "离线缓存", uri: "bilibili://user_center/download" },
+        { id: 2, title: "历史记录", uri: "bilibili://user_center/history" },
+      ],
+      ipad_upper_sections: [
+        { id: 171, title: "投稿", uri: "bilibili://uper/user_center/archive_selection" },
+        { id: 172, title: "创作首页", uri: "bilibili://uper/homevc" },
+        { id: 173, title: "稿件管理", uri: "bilibili://uper/user_center/archive_list" },
+        { id: 174, title: "有奖活动", uri: "https://www.bilibili.com/blackboard/reward.html" },
+      ],
+      ipad_recommend_sections: [
+        { id: 301, title: "我的关注" },
+        { id: 302, title: "我的消息" },
+        { id: 303, title: "我的钱包" },
+        { id: 304, title: "直播中心" },
+        { id: 305, title: "大会员" },
+        { id: 306, title: "我的游戏" },
+        { id: 307, title: "我的课程" },
+      ],
+      ipad_more_sections: [
+        { id: 401, title: "联系客服" },
+        { id: 402, title: "设置" },
+        { id: 403, title: "青少年模式" },
+      ],
+    },
+  });
+}
+
+function ipadVipAdsFixtureBody() {
+  return JSON.stringify({
+    code: 0,
+    message: "OK",
+    ttl: 1,
+    data: {
+      list: [
+        {
+          id: 9001,
+          position: "ipad_vip",
+          title_list: ["大会员广告素材 A"],
+          image_list: ["https://ads.example.test/vip-a.png"],
+        },
+      ],
+      list_v2: [
+        {
+          id: 9002,
+          position: "ipad_vip_v2",
+          title_list: ["大会员广告素材 B"],
+        },
+      ],
+      vip_login_coupon: {
+        login_layer: {
+          title: "登录领取优惠券",
+          image: "https://ads.example.test/coupon.png",
+        },
+        exp: { group: "sample" },
+        report: { event_id: "sample-report" },
       },
     },
   });
@@ -1174,6 +1378,8 @@ module.exports = {
   notifyingArgument,
   runPlugin,
   assertNotification,
+  assertUnchangedResponse,
+  assertBodyOnlyResponsePatch,
   findNotification,
   grpcMessageBytes,
   countTopLevelGrpcFields,
@@ -1184,8 +1390,10 @@ module.exports = {
   homePopularFixtureBody,
   normalRelatedItem,
   viewFixtureBody,
+  ipadLegacyViewFixtureBody,
   relatesFeedFixtureBody,
   videoFeedFixtureBody,
+  ipadHomeFeedFixtureBody,
   splashShowFixtureBody,
   splashListFixtureBody,
   splashBrandListFixtureBody,
@@ -1194,9 +1402,12 @@ module.exports = {
   splashEventFullFixtureBody,
   splashBrandFullFixtureBody,
   startupTabFixtureBody,
+  ipadStartupTabFixtureBody,
   startupSkinFixtureBody,
   startupPeakDownloadFixtureBody,
   minePageFixtureBody,
+  ipadMinePageFixtureBody,
+  ipadVipAdsFixtureBody,
   searchSquareFixtureBody,
   searchDefaultWordsFixtureBody,
   searchSuggestFixtureBody,

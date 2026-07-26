@@ -1,8 +1,9 @@
+// core_modules/Common: dynamic-page filtering and personalization shared by iOS and iPadOS.
 /* -------------------------------------------------------------------------- */
-/* 动态页过滤与个性化                                                         */
+/* Dynamic-page filtering and personalization                                 */
 /* -------------------------------------------------------------------------- */
 
-// 压缩展示文本：去除零宽字符与链接，超长时进行截断并附加省略号。
+// Compact display text by removing zero-width characters and links, then truncate when needed.
 function compactDisplayText(value, maxLength = 48) {
   const text = String(value || "")
     .replace(/\u200b/g, "")
@@ -14,7 +15,7 @@ function compactDisplayText(value, maxLength = 48) {
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
 
-// 汇总动态页 UP 主推荐商品的展示信息。
+// Build a display summary for creator-promoted products on the dynamic page.
 function dynamicUpRecommendationSummary(bytes) {
   const rawText = decodeString(bytes);
   const values = extractReadableStrings(bytes)
@@ -26,7 +27,7 @@ function dynamicUpRecommendationSummary(bytes) {
   };
 }
 
-// 汇总被关键词屏蔽的整条动态的展示信息。
+// Build a display summary for a dynamic item blocked by a keyword.
 function dynamicKeywordBlockSummary(bytes, match) {
   const entries = readableProtobufEntries(bytes, 8);
   const up = firstSummaryUp(entries, [
@@ -53,7 +54,7 @@ function dynamicKeywordBlockSummary(bytes, match) {
   };
 }
 
-// 判断整条动态是否命中动态页关键词。
+// Determine whether an entire dynamic item matches a configured keyword.
 function findDynamicKeywordMatch(bytes, keywords) {
   return findContentKeywordMatch([
     decodeString(bytes),
@@ -61,7 +62,7 @@ function findDynamicKeywordMatch(bytes, keywords) {
   ], keywords, "dynamicKeywords");
 }
 
-// 判断是否为动态页 UP 主推荐模块。
+// Detect a creator-promotion module on the dynamic page.
 function isDynamicUpRecommendationModule(bytes) {
   const fields = tryParseFields(bytes);
   if (!fields || varintField(fields, 1) !== 8) return false;
@@ -71,13 +72,13 @@ function isDynamicUpRecommendationModule(bytes) {
     /(商品来自淘宝|schema_name":"淘宝|tbopen:|taobao|com\.taobao|\/bfs\/mall\/|去看看|is_ad_loc)/.test(text);
 }
 
-// 判断是否为动态页扩展商品信息。
+// Detect extended product information on the dynamic page.
 function isDynamicUpRecommendationExtendGoods(bytes) {
   const text = decodeString(bytes);
   return /(商品来自淘宝|schema_name":"淘宝|tbopen:|taobao|com\.taobao|\/bfs\/mall\/|\/bfs\/sycp\/|is_ad_loc)/.test(text);
 }
 
-// 判断是否为动态页推荐详情。
+// Detect dynamic-page promotion details.
 function isDynamicUpRecommendationDetail(bytes) {
   const fields = tryParseFields(bytes);
   if (!fields) return false;
@@ -91,7 +92,7 @@ function isDynamicUpRecommendationDetail(bytes) {
   return isDynamicUpRecommendationExtendGoods(bytes);
 }
 
-// 递归清理动态页中内嵌的推荐详情。
+// Recursively remove embedded promotion details from a dynamic item.
 function sanitizeDynamicNestedRecommendations(bytes, summary, alreadyCounted) {
   const result = transformProtobufFields(bytes, ({ field }) => {
     if (isProtobufMessageField(field) && isDynamicUpRecommendationDetail(field.value)) {
@@ -104,7 +105,7 @@ function sanitizeDynamicNestedRecommendations(bytes, summary, alreadyCounted) {
   return result.changed ? result.bytes : bytes;
 }
 
-// 清理动态页扩展信息中的推荐商品。
+// Remove promoted products from dynamic-page extension data.
 function sanitizeDynamicExtend(extendBytes, summary, alreadyCounted) {
   const result = transformProtobufFields(extendBytes, ({ field, depth }) => {
     if (!isProtobufMessageField(field)) return null;
@@ -120,7 +121,7 @@ function sanitizeDynamicExtend(extendBytes, summary, alreadyCounted) {
   return result.changed ? result.bytes : extendBytes;
 }
 
-// 清理单条动态中的推荐模块以及其扩展商品。
+// Remove promotion modules and extended products from one dynamic item.
 function sanitizeDynamicItemModules(itemBytes, summary) {
   const fields = tryParseFields(itemBytes);
   if (!fields) return itemBytes;
@@ -160,7 +161,7 @@ function sanitizeDynamicItemModules(itemBytes, summary) {
   return changed ? concat(chunks) : itemBytes;
 }
 
-// 在动态 protobuf 消息中查找推荐商品的字节片段。
+// Locate promoted-product bytes within a dynamic protobuf message.
 function findDynamicUpRecommendationBytes(bytes) {
   let matched = null;
   walkProtobufFields(bytes, ({ fields }) => {
@@ -176,7 +177,7 @@ function findDynamicUpRecommendationBytes(bytes) {
   return matched;
 }
 
-// 清理动态列表：按指定的模式移除 UP 主推荐项，并根据关键词屏蔽整条动态。
+// Clean a dynamic list by applying the selected promotion mode and keyword rules.
 function sanitizeDynamicAllList(listBytes, summary, mode, dynamicKeywords) {
   const fields = tryParseFields(listBytes);
   if (!fields) return listBytes;
@@ -220,7 +221,7 @@ function sanitizeDynamicAllList(listBytes, summary, mode, dynamicKeywords) {
   return changed ? concat(chunks) : listBytes;
 }
 
-// 清理动态页的 gRPC 消息体。
+// Clean the dynamic-page gRPC payload.
 function sanitizeDynamicAllMessage(messageBytes, summary, mode, dynamicKeywords) {
   const fields = parseFields(messageBytes);
   let changed = false;
@@ -239,12 +240,12 @@ function sanitizeDynamicAllMessage(messageBytes, summary, mode, dynamicKeywords)
   return changed ? concat(chunks) : messageBytes;
 }
 
-// 「最常访问」UP 列表区段的体积上限（字节数），超过该数值的区段将被视为主动态列表等大区段而跳过处理。
+// Byte-size limit for frequent-creator sections; larger sections are treated as primary content.
 const DYNAMIC_UP_LIST_MAX_SIZE = 4096;
-// 「最常访问」区段中的直播态标记。在 auto 模式下，命中该标记的区段将被保留而不删除。
+// Live-state markers that preserve a frequent-creator section in auto mode.
 const DYNAMIC_LIVE_MARKER_PATTERN = /live_status|"live"|直播中|live_play_info|live_room_id/;
 
-// 判断一段 protobuf 字节是否像「最常访问」UP 列表区段：体积较小、包含多个短 UP 名并且不含动态卡片标记。
+// Detect a compact frequent-creator section containing short names but no dynamic-card markers.
 function isDynamicUpListSection(bytes) {
   if (bytes.length > DYNAMIC_UP_LIST_MAX_SIZE) return false;
   const text = decodeString(bytes);
@@ -255,14 +256,14 @@ function isDynamicUpListSection(bytes) {
   return names.length >= 3;
 }
 
-// 按照 dynamicUpListMode 处理「最常访问」UP 列表区段。
-// hide 模式移除整段区段，auto 模式仅在没有直播态标记时才移除，show 模式不做任何改动。
+// Apply dynamicUpListMode to frequent-creator sections.
+// Hide removes the section, auto removes it only without live markers, and show preserves it.
 function sanitizeDynamicUpList(message, mode, summary) {
   summary.upListMode = mode;
   if (mode === "show") return message;
   let removedCount = 0;
   const result = transformProtobufFields(message, ({ field, depth }) => {
-    // 仅在顶层、且非动态列表（field 1）的字段中查找「最常访问」区段，避免误删动态列表。
+    // Inspect only top-level non-field-1 sections to avoid deleting the primary dynamic list.
     if (depth > 0 || field.no === 1) return null;
     if (!isProtobufMessageField(field) || !isDynamicUpListSection(field.value)) return null;
     if (mode === "auto" && DYNAMIC_LIVE_MARKER_PATTERN.test(decodeString(field.value))) return null;
@@ -273,7 +274,7 @@ function sanitizeDynamicUpList(message, mode, summary) {
   return result.changed ? result.bytes : message;
 }
 
-// 生成动态页 UP 主推荐的系统通知正文。
+// Build the notification body for dynamic-page creator promotions.
 function dynamicUpRecommendationMessage(items) {
   if (!items.length) return "未命中动态页 UP 主推荐";
   return "移除-动态页 UP 主的推荐：\n" + items
@@ -282,7 +283,7 @@ function dynamicUpRecommendationMessage(items) {
     .join("\n");
 }
 
-// 汇总动态页的系统通知完整内容。
+// Build the complete dynamic-page notification payload.
 function dynamicNotifyPayload(summary, mode, cleaned = true) {
   if (!cleaned) {
     return {
@@ -302,7 +303,7 @@ function dynamicNotifyPayload(summary, mode, cleaned = true) {
   };
 }
 
-// 生成动态页的系统通知正文。
+// Build the dynamic-page notification message.
 function dynamicNotifyMessage(summary, mode) {
   const messages = [];
   if (summary.upRecommendations.length) messages.push(dynamicUpRecommendationMessage(summary.upRecommendations));
@@ -311,7 +312,7 @@ function dynamicNotifyMessage(summary, mode) {
   return mode === "off" ? "未命中动态页清理规则" : dynamicUpRecommendationMessage([]);
 }
 
-// 处理动态页（DynAll）的 gRPC 响应。
+// Handle the dynamic-page DynAll gRPC response.
 function handleDynamicAllResponse() {
   const dynamicKeywords = buildContentKeywords(arg.dynamicKeywords);
   const hasUpListAction = dynamicUpListMode !== "show";
@@ -319,7 +320,7 @@ function handleDynamicAllResponse() {
     const notifyPayload = dynamicNotifyPayload({ kept: 0, upRecommendations: [], blockedDynamics: [] }, dynamicUpRecommendationMode, false);
     log("info", { page: "dynamic", endpoint: "DynAll", mode: dynamicUpRecommendationMode, cleaned: false });
     notify("remove", notifyPayload.title, notifyPayload.subtitle, notifyPayload.message);
-    return $done({ response: $response });
+    return finishResponse();
   }
 
   const message = decodeGrpcBody(getResponseBodyBytes());
@@ -362,5 +363,5 @@ function handleDynamicAllResponse() {
     cleanup: cleanupPayload,
     filter: filterPayload,
   });
-  $done({ response: $response });
+  finishResponse();
 }

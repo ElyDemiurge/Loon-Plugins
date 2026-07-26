@@ -3,11 +3,13 @@ const {
   notifyingArgument,
   runPlugin,
   assertNotification,
+  assertUnchangedResponse,
+  assertBodyOnlyResponsePatch,
   test,
 } = require("./test_context");
 
 /* -------------------------------------------------------------------------- */
-/* 直播电商 / 追踪参数 / 青少年模式 / 交互弹幕                               */
+/* Live commerce, tracking, teenager mode, and interactive danmaku            */
 /* -------------------------------------------------------------------------- */
 
 test("直播间：电商购物信息返回空响应", async () => {
@@ -17,6 +19,7 @@ test("直播间：电商购物信息返回空响应", async () => {
     argument: notifyingArgument(),
   });
   assert.equal(JSON.parse(result.response.body).code, -1);
+  assertBodyOnlyResponsePatch(result);
   assertNotification(result, "清理直播电商购物信息");
 });
 
@@ -31,27 +34,30 @@ test("pd-proxy/tracker：改写 STUN 服务器为失效地址", async () => {
   assert.deepEqual(data.stuns, ["stun.chat.bilibili.com:3478", "stun.chat.bilibili.com:3478"]);
   assert.deepEqual(data.trackers, ["stun.chat.bilibili.com:3478"]);
   assert.equal(data.live_trackers, null);
+  assertBodyOnlyResponsePatch(result);
   assertNotification(result, /改写追踪服务器 3/);
 });
 
 test("青少年模式：mock 为关闭态字节", async () => {
   const result = await runPlugin({
     url: "https://grpc.biliapi.net/bilibili.app.interface.v1.Teenagers/ModeStatus",
-    bodyBytes: Buffer.from([0x00, 0x00, 0x00, 0x00, 0x01, 0x0a]),
+    omitResponseBody: true,
     argument: notifyingArgument(),
   });
   const out = Buffer.from(result.response.bodyBytes);
   assert.equal(out.length, 24);
   assert.equal(out[5], 0x0a);
+  assertBodyOnlyResponsePatch(result);
 });
 
 test("交互式弹幕：mock 为空字节", async () => {
   const result = await runPlugin({
     url: "https://grpc.biliapi.net/bilibili.app.viewunite.v1.View/PlayPause",
-    bodyBytes: Buffer.from([0x00, 0x00, 0x00, 0x00, 0x02, 0x01, 0x02]),
+    omitResponseBody: true,
     argument: notifyingArgument(),
   });
   assert.deepEqual([...Buffer.from(result.response.bodyBytes)], [0, 0, 0, 0, 0]);
+  assertBodyOnlyResponsePatch(result);
 });
 
 test("开关关闭时：青少年模式与交互弹幕保留原响应", async () => {
@@ -62,6 +68,8 @@ test("开关关闭时：青少年模式与交互弹幕保留原响应", async ()
     argument: notifyingArgument({ cleanTeenagersMode: false }),
   });
   assert.deepEqual([...Buffer.from(result.response.bodyBytes)], [...original]);
+  assertUnchangedResponse(result);
+  assert.equal(result.notifications.length, 0);
 });
 
 test("路由：未知接口原样返回而不按首页热门解析", async () => {
@@ -73,6 +81,7 @@ test("路由：未知接口原样返回而不按首页热门解析", async () =>
   });
 
   assert.equal(result.response.body, original);
+  assertUnchangedResponse(result);
   assert.equal(result.notifications.length, 0);
   assert.doesNotMatch(result.logs.join("\n"), /\[error\]/);
 });

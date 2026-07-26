@@ -13,7 +13,7 @@ const {
 } = require("./test_context");
 
 /* -------------------------------------------------------------------------- */
-/* 评论区 / 直播间 / 动态最常访问                                            */
+/* Replies, live rooms, and frequent dynamic creators                         */
 /* -------------------------------------------------------------------------- */
 
 function replyMainListFixtureBody() {

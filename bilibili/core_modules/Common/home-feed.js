@@ -1,8 +1,9 @@
+// core_modules/Common: home-feed and popular-page handling shared by iOS and iPadOS.
 /* -------------------------------------------------------------------------- */
-/* 首页推荐页与首页热门                                                       */
+/* Home feed and popular page                                                 */
 /* -------------------------------------------------------------------------- */
 
-// 从首页推荐项中提取标题与 UP 主名称。
+// Extract titles and creator names from a home-feed item.
 function extractHomeFeedItemText(item) {
   return {
     titles: [
@@ -24,7 +25,7 @@ function extractHomeFeedItemText(item) {
   };
 }
 
-// 从首页推荐项构建过滤行结构。
+// Build a normalized filter row from a home-feed item.
 function homeFeedFilterRow(item) {
   const { titles, upNames } = extractHomeFeedItemText(item);
   return createFilterRow({
@@ -36,7 +37,7 @@ function homeFeedFilterRow(item) {
   });
 }
 
-// 从首页热门卡片的 protobuf 字节中构建过滤行结构。
+// Build a filter row from a popular-page protobuf card.
 function extractPopularFilterRow(cardBytes, keywords) {
   try {
     const text = extractCardText(cardBytes);
@@ -52,7 +53,7 @@ function extractPopularFilterRow(cardBytes, keywords) {
   }
 }
 
-// 过滤首页推荐页（feed/index）的 HTTP 响应。
+// Filter the home feed/index HTTP response.
 async function filterHomeFeedIndex() {
   const keywords = buildKeywords();
   const hasKeywordFilter = hasAnyFilterRule(keywords);
@@ -63,7 +64,7 @@ async function filterHomeFeedIndex() {
   const json = parseResponseJson();
   if (!Array.isArray(json?.data?.items)) {
     log("info", { page: "homeFeed", message: "items not found" });
-    return $done({ response: $response });
+    return finishResponse();
   }
   const items = json.data.items;
   let kept = 0;
@@ -71,12 +72,12 @@ async function filterHomeFeedIndex() {
   let cleanedAds = 0;
   let cleanedPromotedVideos = 0;
 
-  // removedItems / cleaned*Items 只用于通知和日志展示。
+  // These collections are used only for notifications and logs.
   const removedItems = [];
   const cleanedAdItems = [];
   const cleanedPromotedVideoItems = [];
 
-  // rows 保存还需要继续跑屏蔽规则的普通视频项。
+  // Rows contains regular videos that still need blocking-rule evaluation.
   const rows = [];
   const nextItems = [];
   for (const item of items) {
@@ -145,17 +146,17 @@ async function filterHomeFeedIndex() {
       message: homeFeedNotifyMessage(removedItems, [], []),
     },
   });
-  $done({ response: $response });
+  finishResponse();
 }
 
-// 判断首页推荐项的清理类型：推广视频或普通广告。
+// Classify a home-feed item as a promoted video, regular advertisement, or normal item.
 function getHomeFeedCleanupType(item) {
   if (isHomeFeedVideoItem(item)) return "";
   if (isHomeFeedPromotedVideoItem(item)) return "promotedVideo";
   return "ad";
 }
 
-// 判断是否为普通的首页视频卡片。
+// Detect a regular home-feed video card.
 function isHomeFeedVideoItem(item) {
   return !!item &&
     !item.banner_item &&
@@ -164,7 +165,7 @@ function isHomeFeedVideoItem(item) {
     HOME_FEED_VIDEO_CARD_TYPES.includes(item.card_type);
 }
 
-// 判断是否为首页推广视频卡片。
+// Detect a promoted home-feed video card.
 function isHomeFeedPromotedVideoItem(item) {
   if (!item?.ad_info) return false;
   const goto = String(item.card_goto || item.goto || "");
@@ -182,20 +183,20 @@ function isHomeFeedPromotedVideoItem(item) {
     HOME_FEED_VIDEO_CARD_TYPES.includes(item.card_type);
 }
 
-// 处理首页热门（Popular/Index）的 gRPC 响应。
+// Handle the Popular/Index gRPC response.
 async function handleHomePopularIndex() {
   const keywords = buildKeywords();
-  // 默认未配置关键词时直接返回，避免解码与递归解析整份热门页 protobuf。
+  // Skip decoding the full protobuf response when no blocking rules are configured.
   if (!hasAnyFilterRule(keywords)) {
     log("info", { page: "homePopular", message: "no keywords configured" });
     notify("filter", "Bilibili 首页热门屏蔽", "未配置屏蔽规则", "请填写视频标题关键词、UP 主名称或视频 Tag");
-    return $done({ response: $response });
+    return finishResponse();
   }
 
   const message = decodeGrpcBody(getResponseBodyBytes());
   const fields = parseFields(message);
 
-  // rows 与顶层 field 1 一一对应，后面按原顺序决定保留或删除。
+  // Rows correspond one-to-one with top-level field 1 cards and preserve source order.
   const rows = [];
   for (const field of fields) {
     if (field.no === 1 && field.wireType === 2) {
@@ -232,5 +233,5 @@ async function handleHomePopularIndex() {
     `保留 ${kept} / 屏蔽 ${removed}`,
     removedItemsMessage(removedItems)
   );
-  $done({ response: $response });
+  finishResponse();
 }

@@ -3,6 +3,7 @@ const {
   notifyingArgument,
   runPlugin,
   assertNotification,
+  assertUnchangedResponse,
   grpcMessageBytes,
   countTopLevelGrpcFields,
   searchSquareFixtureBody,
@@ -18,7 +19,7 @@ const {
 } = require("./test_context");
 
 /* -------------------------------------------------------------------------- */
-/* 首页搜索                                                                   */
+/* Home search                                                                */
 /* -------------------------------------------------------------------------- */
 
 test("首页搜索页面：默认移除热搜、搜索历史和搜索发现模块", async () => {
@@ -74,7 +75,8 @@ test("搜索框：关闭开关时保留滚动的推荐词", async () => {
 
   assert.match(text, /样例搜索框推荐词/);
   assert.match(text, /样例搜索框展示词/);
-  assertNotification(result, "已关闭");
+  assertUnchangedResponse(result);
+  assert.equal(result.notifications.length, 0);
 });
 
 test("搜索候选词条：关键词会屏蔽输入联想候选项", async () => {

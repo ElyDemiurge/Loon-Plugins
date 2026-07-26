@@ -1,15 +1,16 @@
+// core_modules/Common: keyword and tag blocking rules shared by iOS and iPadOS.
 /* -------------------------------------------------------------------------- */
-/* 屏蔽规则与关键词                                                           */
+/* Blocking rules and keywords                                                */
 /* -------------------------------------------------------------------------- */
 
-// 构建本次执行所需的屏蔽规则集合：标题关键词、UP 名称以及视频 Tag 正则，同时保留原始写法用于通知与日志展示。
+// Build title, creator, and tag rules while preserving display values for logs and notifications.
 function buildKeywords() {
   const videoTagPatterns = parseVideoTagPatterns(arg.videoTagKeywords);
   const displayTitleKeywords = mergeDisplayKeywords(parseDisplayKeywords(arg.titleKeywords));
   const displayBlockedUps = mergeDisplayKeywords(parseDisplayKeywords(arg.blockedUps));
   return {
     titleKeywords: parseKeywords(displayTitleKeywords),
-    // UP 名称只在这里做一次标准化，避免每张卡片匹配时重复清理同一组关键词。
+    // Normalize creator names once instead of repeating the work for every card.
     blockedUps: parseKeywords(displayBlockedUps).map(normalizeUpName),
     videoTagKeywords: videoTagPatterns,
     videoTagRegexes: buildRegexRules(videoTagPatterns),
@@ -19,7 +20,7 @@ function buildKeywords() {
   };
 }
 
-// 构建动态页以及搜索结果等内容场景的通用关键词规则。
+// Build generic content-keyword rules for dynamic and search-result pages.
 function buildContentKeywords(value) {
   const displayKeywords = parseDisplayKeywords(value);
   return {
@@ -28,12 +29,12 @@ function buildContentKeywords(value) {
   };
 }
 
-// 判断给定内容场景是否配置了可用的关键词。
+// Check whether usable content keywords are configured.
 function hasContentKeywords(keywords) {
   return keywords.displayKeywords.length > 0;
 }
 
-// 在候选文本列表中查找内容关键词的命中项，命中后返回规则名、关键词以及命中的文本值。
+// Find the first content-keyword match and return its rule, keyword, and matched value.
 function findContentKeywordMatch(values, keywords, rule = "contentContains") {
   if (!hasContentKeywords(keywords)) return null;
   const match = findContainsMatch(
@@ -44,24 +45,24 @@ function findContentKeywordMatch(values, keywords, rule = "contentContains") {
   return match ? { rule, keyword: match.keyword, value: match.value } : null;
 }
 
-// 判断视频 Tag 过滤功能是否启用，需要同时开启深度屏蔽开关并配置了 Tag 规则。
+// Enable tag filtering only when deep filtering and tag rules are both configured.
 function hasVideoTagFilter(keywords) {
   return arg.deepFilter && keywords.videoTagKeywords.length > 0;
 }
 
-// 判断是否配置了任意一条屏蔽规则（标题关键词、UP 名称或视频 Tag）。
+// Check whether any title, creator, or tag blocking rule is active.
 function hasAnyFilterRule(keywords) {
   return keywords.titleKeywords.length > 0 ||
     keywords.blockedUps.length > 0 ||
     hasVideoTagFilter(keywords);
 }
 
-// 将响应体文本解析为 JSON 对象。
+// Parse the response body as JSON.
 function parseResponseJson() {
   return JSON.parse(getResponseBodyText());
 }
 
-// 汇总通用的过滤统计信息，供脚本日志统一输出时使用。
+// Build common filter statistics for structured logging.
 function filterSummary(page, kept, removed, keywords) {
   return {
     page,
@@ -74,7 +75,7 @@ function filterSummary(page, kept, removed, keywords) {
   };
 }
 
-// 构造统一的过滤行结构，同时承载标题、UP 名称、aid 以及内联视频 Tag。
+// Create a normalized filter row containing titles, creators, aid, and inline tags.
 function createFilterRow({ item = null, titles = [], upNames = [], aid = "", inlineTags = [] }) {
   return {
     item,
@@ -85,7 +86,7 @@ function createFilterRow({ item = null, titles = [], upNames = [], aid = "", inl
   };
 }
 
-// 从命中的过滤行中生成用于通知与日志展示的条目。
+// Convert a matched filter row into a notification and log item.
 function matchedFilterItem(row) {
   return {
     title: firstNonEmpty(row.titles),
@@ -97,7 +98,7 @@ function matchedFilterItem(row) {
   };
 }
 
-// 依次按标题关键词与 UP 主名称进行匹配，返回首个命中的规则。
+// Match title keywords first and exact creator names second.
 function findTextMatch(titles, upNames, keywords) {
   const titleMatch = findContainsMatch(titles, keywords.titleKeywords, keywords.displayTitleKeywords);
   if (titleMatch) {
@@ -112,7 +113,7 @@ function findTextMatch(titles, upNames, keywords) {
   return null;
 }
 
-// 按视频 Tag 正则进行匹配，返回首个命中的规则。
+// Return the first matching video-tag regex rule.
 function findTagMatch(tags, keywords) {
   if (!hasVideoTagFilter(keywords)) return null;
   const tagMatch = findRegexMatch(
@@ -122,7 +123,7 @@ function findTagMatch(tags, keywords) {
   return tagMatch ? { rule: "tagRegex", keyword: tagMatch.keyword, value: tagMatch.value } : null;
 }
 
-// 为一组过滤行依次填充 match 字段：先执行文本匹配，未命中的行再补充执行 Tag 匹配。
+// Populate row matches with text rules first, then tag rules for unmatched rows.
 async function applyFilterMatches(rows, keywords) {
   for (const row of rows) {
     row.match = findTextMatch(row.titles, row.upNames, keywords);
@@ -130,7 +131,7 @@ async function applyFilterMatches(rows, keywords) {
   await applyTagMatches(rows, keywords);
 }
 
-// 按照并发上限依次处理列表中的每一项，超出并发数的项目排队等待可用空位。
+// Process items with a fixed concurrency limit and queue the remainder.
 async function mapLimited(items, limit, worker) {
   const concurrency = Math.max(1, Math.min(Number(limit) || 1, items.length || 1));
   let index = 0;
@@ -142,7 +143,7 @@ async function mapLimited(items, limit, worker) {
   }));
 }
 
-// 对尚未命中文本屏蔽规则的行尝试 Tag 匹配：优先用内联 Tag，其次查缓存，最后按需向远端拉取视频标签。
+// Match tags for remaining rows using inline data, cache entries, then remote lookups.
 async function applyTagMatches(rows, keywords) {
   if (!hasVideoTagFilter(keywords)) return;
 
@@ -157,7 +158,7 @@ async function applyTagMatches(rows, keywords) {
     }
 
     const cachedTags = getCachedTags(row.aid);
-    // 内联 Tag 已经检查过，不再创建合并数组重复匹配。
+    // Inline tags were already checked, so avoid allocating a merged array.
     const cachedTagMatch = findTagMatch(cachedTags, keywords);
     if (cachedTagMatch) {
       row.match = cachedTagMatch;
@@ -172,11 +173,11 @@ async function applyTagMatches(rows, keywords) {
     const tagMatch = findTagMatch(tags, keywords);
     if (tagMatch) row.match = tagMatch;
   });
-  // 一次推荐流可能拉取几十个 Tag，统一在批次结束后裁剪并写入一次持久化缓存。
+  // Prune and persist once after a batch that may fetch dozens of tag sets.
   flushTagCache();
 }
 
-// 在候选文本中查找包含关系命中（供标题关键词等使用，不区分大小写）。
+// Find a case-insensitive substring match in candidate values.
 function findContainsMatch(values, normalizedKeywords, displayKeywords) {
   if (!normalizedKeywords.length) return null;
   for (const value of values) {
@@ -190,7 +191,7 @@ function findContainsMatch(values, normalizedKeywords, displayKeywords) {
   return null;
 }
 
-// 在候选文本中查找完全匹配命中（供 UP 名称等使用，不区分大小写）。
+// Find a case-insensitive exact match in candidate values.
 function findExactMatch(values, normalizedKeywords, displayKeywords) {
   if (!normalizedKeywords.length) return null;
   for (const value of values) {
@@ -204,7 +205,7 @@ function findExactMatch(values, normalizedKeywords, displayKeywords) {
   return null;
 }
 
-// 在候选文本中查找正则命中（供视频 Tag 等正则规则使用）。
+// Find the first regular-expression match in candidate values.
 function findRegexMatch(values, regexRules) {
   if (!regexRules.length) return null;
   for (const value of values) {
@@ -220,12 +221,12 @@ function findRegexMatch(values, regexRules) {
   return null;
 }
 
-// 返回首个非空字符串。
+// Return the first non-empty string.
 function firstNonEmpty(values) {
   return values.find((value) => String(value || "").trim()) || "";
 }
 
-// 对字符串列表执行去空白与去重操作，并过滤掉空值。
+// Trim, deduplicate, and remove empty strings from a list.
 function uniqueStrings(values) {
   const result = [];
   const seen = new Set();

@@ -1,8 +1,9 @@
+// core_modules/Common: persistent video-tag cache shared by iOS and iPadOS.
 /* -------------------------------------------------------------------------- */
-/* 本地存储与 Tag 缓存                                                       */
+/* Persistent storage and tag caching                                         */
 /* -------------------------------------------------------------------------- */
 
-// 从持久化存储中读取指定键名对应的值，运行环境不可用时返回 null。
+// Read a persistent value and return null when storage is unavailable.
 function readStore(key) {
   try {
     if (typeof $persistentStore !== "undefined" && typeof $persistentStore.read === "function") {
@@ -14,7 +15,7 @@ function readStore(key) {
   return null;
 }
 
-// 将指定值写入持久化存储，运行环境不可用时返回 false。
+// Write a persistent value and return false when storage is unavailable.
 function writeStore(key, value) {
   try {
     if (typeof $persistentStore !== "undefined" && typeof $persistentStore.write === "function") {
@@ -26,7 +27,7 @@ function writeStore(key, value) {
   return false;
 }
 
-// 清理用于展示的关键词文本：去除零宽字符并合并多余的空白字符。
+// Clean display keywords by removing zero-width characters and collapsing whitespace.
 function cleanDisplayKeyword(value) {
   return String(value || "")
     .replace(/\u200b/g, "")
@@ -34,7 +35,7 @@ function cleanDisplayKeyword(value) {
     .trim();
 }
 
-// 合并多组关键词并去重，保留原始写法用于展示。
+// Merge and deduplicate keyword groups while preserving display spelling.
 function mergeDisplayKeywords(...groups) {
   const result = [];
   const seen = new Set();
@@ -52,30 +53,29 @@ function mergeDisplayKeywords(...groups) {
 }
 
 
-// 开屏创意缓存刷新入口（/splash/list）的 URL 特征。
-// 该端点直接返回 "OK"（而非 JSON），让客户端解析失败从而不保留开屏创意缓存，
-// 以此避免应用从后台切到前台时继续展示旧的开屏内容（与同一端点的最小响应策略保持一致）。
+// URL pattern for the /splash/list creative-cache refresh endpoint.
+// Returning plain "OK" prevents the client from retaining stale splash creatives.
 const SPLASH_LIST_URL_PATTERN = /\/x\/v2\/splash\/list\?/;
-// /splash/show 与 /splash/event/list2 端点：只清空 show 或 event_list 字段，保留 splash_request_id 等其他字段不变。
+// For /splash/show and /splash/event/list2, clear only the target list and preserve session fields.
 const SPLASH_SHOW_EVENT_PATTERN = /\/x\/v2\/splash\/(?:show|event\/list2)\?/;
 
-// 固定的 mock 响应字节（以十六进制硬编码，避免依赖 atob 或 Buffer）。
-// 青少年模式关闭态：5 字节零前缀的 gRPC 帧，加上 ModeStatus（{mode: TEENAGERS, title: "teenagers", ...}）消息。
+// Fixed hexadecimal mock bytes avoid relying on atob or Buffer.
+// Teenager mode disabled: a five-byte gRPC prefix followed by a ModeStatus message.
 const TEENAGERS_MODE_OFF_BYTES = new Uint8Array([
   0x00, 0x00, 0x00, 0x00, 0x13, 0x0a, 0x11, 0x08, 0x02, 0x12, 0x09,
   0x74, 0x65, 0x65, 0x6e, 0x61, 0x67, 0x65, 0x72, 0x73, 0x20, 0x02, 0x2a, 0x00,
 ]);
-// 交互式弹幕清空：空 gRPC 帧（5 字节均为零）。
+// Interactive danmaku disabled: an empty five-byte gRPC frame.
 const INTERACTIVE_DANMAKU_EMPTY_BYTES = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00]);
-// 直播间电商购物信息的最小空 JSON 响应（code: -1 表示拒绝）。
+// Minimal live-commerce rejection response.
 const REJECT_RESPONSE_BODY = JSON.stringify({ code: -1, message: "", data: null });
 
-// Tag 缓存的运行内存镜像，用于避免在同一次脚本执行过程中重复读取持久化存储。
+// In-memory tag-cache mirror that avoids repeated persistent reads in one invocation.
 let tagCacheMemo = null;
-// 标记内存缓存是否有尚未写入持久化存储的变更。
+// Tracks whether the in-memory cache has unpersisted changes.
 let tagCacheDirty = false;
 
-// 读取 Tag 缓存对象，首次访问时从持久化存储中加载并缓存到内存中。
+// Load the tag cache from persistent storage on first access.
 function readTagCache() {
   if (tagCacheMemo) return tagCacheMemo;
   try {
@@ -86,7 +86,7 @@ function readTagCache() {
   return tagCacheMemo;
 }
 
-// 写入 Tag 缓存，同时更新运行内存中的镜像与持久化存储。
+// Update both the in-memory mirror and persistent tag cache.
 function writeTagCache(cache) {
   tagCacheMemo = cache;
   const written = writeStore(TAG_CACHE_KEY, JSON.stringify(cache));
@@ -94,7 +94,7 @@ function writeTagCache(cache) {
   return written;
 }
 
-// 淘汰过期与超限缓存：按更新时间保留最新的条目；批量抓取 Tag 时只在最终落盘前执行一次。
+// Prune expired and excess entries, keeping the most recently updated values.
 function pruneTagCache(cache, now = Date.now()) {
   const entries = Object.entries(cache.items || {})
     .filter(([, item]) => now - (item.updatedAt || 0) <= TAG_CACHE_TTL)
@@ -104,14 +104,14 @@ function pruneTagCache(cache, now = Date.now()) {
   return cache;
 }
 
-// 把本次执行中累积的 Tag 缓存变更合并写入持久化存储。
+// Flush accumulated cache changes to persistent storage once.
 function flushTagCache(now = Date.now()) {
   if (!tagCacheDirty || !tagCacheMemo) return false;
   writeTagCache(pruneTagCache(tagCacheMemo, now));
   return true;
 }
 
-// 读取指定 aid 的缓存 Tag，缓存已过期或不存在时返回空数组。
+// Read cached tags for an aid, returning an empty list when absent or expired.
 function getCachedTags(aid) {
   if (!aid) return [];
   const cache = readTagCache();
@@ -120,7 +120,7 @@ function getCachedTags(aid) {
   return Array.isArray(item.tags) ? item.tags : [];
 }
 
-// 保存指定 aid 的 Tag 缓存并返回缓存状态（新增、更新、未变更或跳过）；立即写入时会同步执行缓存裁剪。
+// Save tags for an aid and return created, updated, unchanged, or skipped status.
 function saveCachedTags(aid, tags, title, options = {}) {
   if (!aid || !tags.length) return { status: "skipped", tags: [] };
   const cache = readTagCache();
@@ -144,17 +144,17 @@ function saveCachedTags(aid, tags, title, options = {}) {
   return { status, tags: nextTags };
 }
 
-// 判断两个字符串集合所包含的元素是否完全一致。
+// Compare two string sets for exact equality.
 function sameStringSet(left, right) {
   const a = uniqueStrings(left).sort();
   const b = uniqueStrings(right).sort();
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
-// 同一次脚本执行内的 Tag 请求去重表，避免对同一 aid 重复发起远端接口请求。
+// Deduplicate concurrent tag requests for the same aid.
 const pendingTagRequests = {};
 
-// 确保指定 aid 能够拿到可用的视频 Tag：优先读取缓存，缓存缺失时向远端发起请求并写入缓存。
+// Resolve tags from cache first, then fetch and cache them when missing.
 async function ensureTagsForAid(aid, options = {}) {
   if (!aid || !arg.deepFilter) return [];
   const cachedTags = getCachedTags(aid);
@@ -178,7 +178,7 @@ async function ensureTagsForAid(aid, options = {}) {
   return tags;
 }
 
-// 请求 Bilibili 远端视频标签接口，返回该视频的全部 Tag 列表。
+// Fetch all tags for a video from the Bilibili tag endpoint.
 async function fetchArchiveTags(aid) {
   const url = `https://api.bilibili.com/x/tag/archive/tags?aid=${encodeURIComponent(aid)}`;
   const text = await httpGetText(url);
@@ -189,7 +189,7 @@ async function fetchArchiveTags(aid) {
   return tags;
 }
 
-// 发起一次文本 GET 请求，优先使用 Loon 运行时提供的 HTTP 客户端，其次回退到浏览器标准的 fetch API。
+// Perform a text GET with Loon's client first and fetch as a fallback.
 function httpGetText(url) {
   return new Promise((resolve, reject) => {
     if (typeof $httpClient !== "undefined" && typeof $httpClient.get === "function") {

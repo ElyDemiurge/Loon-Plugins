@@ -1,14 +1,15 @@
+// core_modules/Common: protobuf message-tree utilities shared by iOS and iPadOS.
 /* -------------------------------------------------------------------------- */
-/* 请求参数与 protobuf 结构提取                                               */
+/* Request parameters and protobuf structure extraction                       */
 /* -------------------------------------------------------------------------- */
 
-// 读取指定字段编号下首个 varint 字段的数值。
+// Read the first varint value for a field number.
 function varintField(fields, no) {
   const field = fields.find((item) => item.no === no && item.wireType === 0);
   return field ? readVarint(field.value, 0).value : "";
 }
 
-// 从视频详情页（View）的 gRPC 请求体中提取视频 aid。
+// Extract the video aid from a View gRPC request body.
 function extractViewAidFromRequest() {
   try {
     const bodyBytes = getRequestBodyBytesSafely();
@@ -22,26 +23,14 @@ function extractViewAidFromRequest() {
   }
 }
 
-// 从视频详情页（View）的 gRPC 响应消息中提取视频 aid。
-function extractViewAidFromMessage(message) {
-  try {
-    const viewFields = parseFields(firstMessage(parseFields(message), 2) || new Uint8Array());
-    const aid = String(varintField(viewFields, 1) || "");
-    if (aid) return aid;
-    return String(firstNonEmpty(fieldStrings(viewFields, 1)).replace(/^#/, "") || "");
-  } catch (error) {
-    log("debug", "failed to extract view aid from response", error);
-    return "";
-  }
-}
-
-// 递归遍历整个 protobuf 消息树，收集所有带有话题链接的视频话题 Tag。
+// Recursively collect video-topic tags that include a recognized topic link.
 function collectTopicTags(messageBytes) {
   const tags = [];
 
   walkProtobufFields(messageBytes, ({ fields }) => {
     const names = fieldStrings(fields, 2);
-    const links = fieldStrings(fields, 3);
+    // ViewUnite stores topic links in field 3; the legacy iPadOS View uses field 7.
+    const links = fieldStrings(fields, 3).concat(fieldStrings(fields, 7));
     if (names.length && links.some((link) => /app_comment_topic|search\?keyword=/.test(link))) {
       tags.push(...names);
     }
@@ -51,7 +40,7 @@ function collectTopicTags(messageBytes) {
   return uniqueStrings(tags);
 }
 
-// 将整数值编码为 protobuf varint 格式的字节数组。
+// Encode an integer as protobuf varint bytes.
 function encodeVarint(value) {
   const bytes = [];
   let next = Number(value);
@@ -64,7 +53,7 @@ function encodeVarint(value) {
   return new Uint8Array(bytes);
 }
 
-// 编码单个 protobuf 字段，wire type 2 时会自动附上长度前缀。
+// Encode one protobuf field, including a length prefix for wire type 2.
 function encodeField(no, wireType, value) {
   const tag = encodeVarint(no * 8 + wireType);
   if (wireType === 2) {
@@ -73,7 +62,7 @@ function encodeField(no, wireType, value) {
   return concat([tag, value]);
 }
 
-// 尝试将字节解析为 protobuf 字段列表，解析失败时返回 null。
+// Parse protobuf fields and return null on failure.
 function tryParseFields(bytes) {
   try {
     const fields = parseFields(bytes);
@@ -83,12 +72,12 @@ function tryParseFields(bytes) {
   }
 }
 
-// 判断字段是否为可继续递归解析的嵌套消息（wire type 2 且值部分非空）。
+// Check whether a field can contain a nested message.
 function isProtobufMessageField(field) {
   return field.wireType === 2 && field.value.length > 0;
 }
 
-// 对 protobuf 消息树执行只读遍历。visitor 回调可以返回 { stop } 提前结束遍历，或者返回 { skipChildren } 跳过当前节点的子层级。
+// Walk a protobuf tree; visitors may stop traversal or skip child nodes.
 function walkProtobufFields(bytes, visitor, options = {}) {
   const maxDepth = Number.isFinite(options.maxDepth) ? options.maxDepth : 12;
   const visited = options.visited || new Set();
@@ -116,7 +105,7 @@ function walkProtobufFields(bytes, visitor, options = {}) {
   return walk(bytes, 0, []);
 }
 
-// 按字段回调重写 protobuf 消息树。visitor 可以删除字段或改写字段的值；无任何变化时直接返回原字节数组，以保持引用稳定。
+// Transform a protobuf tree while preserving original bytes when nothing changes.
 function transformProtobufFields(bytes, visitor, options = {}) {
   const maxDepth = Number.isFinite(options.maxDepth) ? options.maxDepth : 12;
 

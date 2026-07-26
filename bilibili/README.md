@@ -1,6 +1,6 @@
 # 比狸比狸过滤
 
-适用于 [Loon](https://nsloon.app/) 的 Bilibili 客户端过滤插件。通过在代理层改写 Bilibili App 的请求与响应，按关键词屏蔽视频与动态，并移除开屏、推荐流、搜索结果等位置的广告和推广内容。
+适用于 [Loon](https://nsloon.app/) 的 Bilibili iOS / iPadOS 客户端过滤插件。通过在代理层改写 Bilibili App 的请求与响应，按关键词屏蔽视频与动态，并移除开屏、推荐流、搜索结果等位置的广告和推广内容。
 
 - 插件名称：比狸比狸过滤
 - 适用平台：iOS、iPadOS（系统版本不低于 15）
@@ -21,8 +21,10 @@
 | 首页搜索页 | 移除热搜、搜索历史、搜索发现模块；移除搜索框滚动推荐词 |
 | 搜索结果与候选词条 | 按关键词、UP 主或 Tag 屏蔽搜索结果；按关键词屏蔽输入联想候选项；移除广告、创作推广、直播与聚合卡片 |
 | 动态页 | 按关键词屏蔽整条动态；移除 UP 主推荐商品；控制「最常访问」列表的显示方式 |
-| 视频详情页 | 移除横幅广告、UP 主推荐好物，同时缓存视频 Tag |
+| 视频详情页 | iOS `ViewUnite` 与 iPadOS 旧版 `View` 分别按各自 protobuf 结构移除广告、直播推荐等内容，同时缓存视频 Tag |
 | 视频页推荐流 | 按关键词与 Tag 屏蔽；移除推广内容、广告、直播推荐卡片 |
+| 我的页面 | 分别识别 iOS 模块列表和 iPadOS 独立分组数组，按开关删除创作中心与我的服务 |
+| iPadOS 大会员广告 | 由两端共用的启动推广开关控制，清空 `/x/vip/ads/materials` 的广告素材列表与登录优惠浮层 |
 | 评论区 | 移除置顶广告回复 |
 | 直播间 | 移除信息流与房间页广告；拦截直播电商购物信息 |
 | 青少年模式与交互式弹幕 | 关闭青少年模式弹窗；移除交互式弹幕 |
@@ -52,7 +54,7 @@ python3 -m http.server 8787 --bind 0.0.0.0
 示例脚本地址（请将 `<局域网 IP>` 替换为本机 IP）：
 
 ```text
-http://<局域网 IP>:8787/bilibili_cleaner.js?v=20260717-109
+http://<局域网 IP>:8787/bilibili_cleaner.js?v=20260726-112
 ```
 
 ## 参数说明
@@ -99,7 +101,7 @@ http://<局域网 IP>:8787/bilibili_cleaner.js?v=20260717-109
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
 | `cleanSplashAds` | 开启 | 清空开屏广告展示列表与素材缓存 |
-| `cleanStartupAds` | 开启 | 清理启动期活动 Tab、启动皮肤装扮与开屏预加载推广资源 |
+| `cleanStartupAds` | 开启 | 清理 iOS 与 iPadOS 的启动期活动 Tab、启动皮肤装扮和开屏预加载推广资源，同时清空 iPadOS 大会员广告素材与登录优惠浮层 |
 | `cleanFeedAds` | 开启 | 移除首页推荐页的横幅、非视频广告与非普通视频卡片 |
 | `cleanFeedPromotedVideos` | 开启 | 移除首页推荐页带广告标记的推广视频卡片 |
 | `cleanVideoRelatedPromotedContent` | 开启 | 移除视频详情页推荐流中的商业推广内容 |
@@ -129,10 +131,10 @@ http://<局域网 IP>:8787/bilibili_cleaner.js?v=20260717-109
 | `cleanSearchHistory` | 开启 | 移除首页搜索页的搜索历史模块 |
 | `cleanSearchDiscovery` | 开启 | 移除首页搜索页的搜索发现模块 |
 | `cleanSearchDefaultWords` | 开启 | 移除首页搜索框内滚动的默认推荐词 |
-| `cleanHomeTopTabs` | 开启 | 精简首页顶部分区，只保留直播、推荐和热门 |
+| `cleanHomeTopTabs` | 开启 | 仅精简 iOS 首页顶部分区，只保留直播、推荐和热门；iPadOS 不使用该过滤代码 |
 | `cleanBottomExtraButtons` | 开启 | 删除底部栏的加号与会员购按钮，保留首页、动态、我的等普通入口 |
-| `cleanMineCreationCenter` | 开启 | 删除我的页面里的创作中心模块 |
-| `cleanMineServices` | 开启 | 删除我的页面里的我的服务模块 |
+| `cleanMineCreationCenter` | 开启 | 删除 iOS / iPadOS 我的页面里的创作中心模块或入口组 |
+| `cleanMineServices` | 开启 | 删除 iOS / iPadOS 我的页面里的我的服务模块或入口组 |
 | `dynamicUpListDisplay` | show | 动态页「最常访问」UP 列表的显示方式。可选：仅存在直播时显示、始终显示、始终隐藏 |
 
 ### 调试与日志
@@ -149,7 +151,9 @@ http://<局域网 IP>:8787/bilibili_cleaner.js?v=20260717-109
 ## 工作机制
 
 - 屏蔽与移除逻辑均在 Loon 拦截到的响应中完成，不修改客户端本身。
-- 首页推荐页、首页搜索页等接口返回 JSON，由脚本解析后改写；首页热门、搜索结果、搜索候选词条、动态页与视频页接口返回 protobuf gRPC，由脚本内置的 protobuf 解析器处理后改写。
+- 单一开关控制的脚本规则使用 Loon 的 `enable={开关}`：开关关闭时不捕获响应体，也不加载脚本。
+- 响应内容没有变化时通过 `$done({})` 原样放行；发生变化时只返回新的 `body`，由 Loon 保留其余响应字段。
+- 首页推荐页、首页搜索页、我的页面和 iPadOS 大会员素材等接口返回 JSON，由脚本解析后改写；首页热门、搜索结果、搜索候选词条、动态页与两端视频页接口返回 protobuf gRPC，由脚本内置的 protobuf 解析器处理后改写。
 - 未配置对应屏蔽规则时，高频首页接口会跳过过滤对象构建或 protobuf 解析；深度 Tag 批量请求完成后只合并写入一次缓存。
 - 涉及的请求与响应在 Loon 中通过 MitM 解密，改写域名为 `app.bilibili.com`、`grpc.biliapi.net`、`api.bilibili.com` 与 `api.live.bilibili.com`。
 
@@ -159,7 +163,10 @@ http://<局域网 IP>:8787/bilibili_cleaner.js?v=20260717-109
 
 ```text
 bilibili/
-├── modules/                         # 按职责拆分的维护源码
+├── core_modules/                    # 模块化维护源码
+│   ├── Common/                      # iOS 与 iPadOS 共用能力
+│   ├── iOS/                         # iOS 独有响应结构与处理器
+│   └── iPadOS/                      # iPadOS 独有响应结构与处理器
 ├── testcases/                       # 自动发现的模块化测试套件
 ├── bilibili_cleaner.js              # 构建生成、由 Loon 加载的单文件脚本
 ├── bilibili_cleaner.lpx             # 正式插件配置
@@ -169,11 +176,11 @@ bilibili/
 └── TECH.md                           # 维护与实现说明
 ```
 
-`bilibili_cleaner.js` 是生成文件。修改功能时应编辑 `modules` 中的对应模块，再运行构建脚本；不要直接修改生成文件。
+`bilibili_cleaner.js` 是生成文件。修改功能时应编辑 `core_modules` 中的对应模块，再运行构建脚本；不要直接修改生成文件。跨平台逻辑放在 `Common`，只适用于单个平台的 protobuf / JSON 结构分别放在 `iOS` 或 `iPadOS`。
 
 ## 本地测试
 
-维护源码位于 `modules`，通过无依赖构建脚本生成 Loon 实际加载的根目录 `bilibili_cleaner.js`。测试套件直接位于 `testcases`，使用代码内生成的最小 JSON / protobuf 样本，不依赖抓包目录，也不写入真实抓包里的敏感值。
+维护源码位于 `core_modules`，通过无依赖构建脚本生成 Loon 实际加载的根目录 `bilibili_cleaner.js`。测试套件直接位于 `testcases`，使用代码内生成的最小 JSON / protobuf 样本，不依赖抓包目录，也不写入真实抓包里的敏感值。
 
 ```bash
 npm run build

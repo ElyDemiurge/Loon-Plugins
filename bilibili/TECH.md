@@ -22,7 +22,7 @@
 
 ## 运行模型
 
-脚本以 Loon 脚本的形式注入，由 Loon 在匹配到的 HTTP 请求或响应上各执行一次。脚本运行时可以访问以下全局对象：
+脚本以 Loon 响应脚本的形式注入，由 Loon 在命中 `http-response` 规则后执行。脚本运行时可以访问以下全局对象：
 
 | 全局对象 | 用途 |
 | --- | --- |
@@ -35,7 +35,11 @@
 | `$utils.ungzip` | 解压 gzip（部分运行时会提供） |
 | `$done` | 结束本次执行，可以传回改写后的请求或响应 |
 
-维护源码位于 `modules`，根目录的 `build_bilibili_cleaner.js` 按依赖顺序将模块拼接为 Loon 实际加载的 `bilibili_cleaner.js`。脚本入口在最后一个模块 `entry.js`：调用异步函数 `main()`，并通过 `.catch()` 兜底，保证任何异常都会调用 `$done()` 并返回响应，避免脚本崩溃后请求被挂起。
+维护源码位于 `core_modules`，按 `Common`、`iOS`、`iPadOS` 区分共用和平台专属代码。根目录的 `build_bilibili_cleaner.js` 按依赖顺序将模块拼接为 Loon 实际加载的 `bilibili_cleaner.js`。脚本入口在最后一个模块 `entry.js`：调用异步函数 `main()`，并通过 `.catch()` 兜底，保证任何异常都会调用 `$done()` 并返回响应，避免脚本崩溃后请求被挂起。
+
+插件配置遵循 Loon 官方插件与脚本 API 约定：`[Argument]` 中声明的参数通过每条规则的 `argument=[{...}]` 显式传入；需要读取 gRPC 响应的路由同时声明 `requires-body=true` 与 `binary-body-mode=true`；单一开关控制的路由通过 `enable={开关}` 在关闭时跳过脚本。固定输出字节且不读取上游响应的青少年模式和交互式弹幕路由不请求响应体。
+
+响应体改写采用延迟提交：`setResponseBodyText()` 与 `setResponseBodyBytes()` 只暂存候选 body，并和原始 body 比较。没有变化时 `finishResponse()` 调用 `$done({})` 原样放行；存在变化时只调用 `$done({body: ...})`。顶层异常兜底同样使用 `$done({})`，不会返回可能只完成了一部分的候选改写。
 
 ## 整体结构
 
@@ -43,20 +47,27 @@
 
 | 顺序 | 文件 | 职责 |
 | ---: | --- | --- |
-| 1 | `modules/config.js` | 默认参数、参数标准化、日志等级与公共常量 |
-| 2 | `modules/runtime-protobuf.js` | Loon 运行时适配、通知、字节转换、gRPC 帧与 protobuf 基础解析 |
-| 3 | `modules/filter-rules.js` | 标题、UP 主、内容关键词与视频 Tag 的统一匹配流程 |
-| 4 | `modules/tag-cache.js` | 持久化 Tag 缓存、远端 Tag 请求、去重与淘汰 |
-| 5 | `modules/protobuf-tools.js` | aid、话题 Tag 与 protobuf 消息树的读取和改写工具 |
-| 6 | `modules/video-search.js` | 视频详情页、推荐流、搜索结果与搜索候选词条 |
-| 7 | `modules/reply.js` | 评论区置顶广告识别与清理 |
-| 8 | `modules/json-page-handlers.js` | 开屏、启动资源、首页入口和我的页面个性化处理 |
-| 9 | `modules/live-and-modes.js` | 直播广告、追踪参数、首页搜索页、青少年模式与交互式弹幕 |
-| 10 | `modules/dynamic.js` | 动态关键词、UP 主推荐商品与「最常访问」列表 |
-| 11 | `modules/home-feed.js` | 首页推荐页和首页热门过滤 |
-| 12 | `modules/entry.js` | `main()` URL 路由与顶层异常兜底 |
+| 1 | `core_modules/Common/config.js` | 默认参数、参数标准化、日志等级与公共常量 |
+| 2 | `core_modules/Common/runtime-protobuf.js` | Loon 运行时适配、通知、字节转换、gRPC 帧与 protobuf 基础解析 |
+| 3 | `core_modules/Common/filter-rules.js` | 标题、UP 主、内容关键词与视频 Tag 的统一匹配流程 |
+| 4 | `core_modules/Common/tag-cache.js` | 持久化 Tag 缓存、远端 Tag 请求、去重与淘汰 |
+| 5 | `core_modules/Common/protobuf-tools.js` | aid、话题 Tag 与 protobuf 消息树的共用读取和改写工具 |
+| 6 | `core_modules/Common/video-search.js` | 两端共用的视频统计、广告识别、推荐流和搜索处理 |
+| 7 | `core_modules/iOS/video.js` | iOS `ViewUnite` 视频详情页与 `RelatesFeed` 结构 |
+| 8 | `core_modules/iPadOS/video.js` | iPadOS 旧版 `View` 视频详情页结构 |
+| 9 | `core_modules/Common/reply.js` | 评论区置顶广告识别与清理 |
+| 10 | `core_modules/Common/json-page-handlers.js` | 开屏、启动资源与共用 JSON 页面处理 |
+| 11 | `core_modules/iOS/home-tabs.js` | iOS 首页顶部分区过滤与 iPadOS 隔离 |
+| 12 | `core_modules/Common/mine.js` | 两端共用的「我的」页面统计与通知 |
+| 13 | `core_modules/iOS/mine.js` | iOS `sections_v2 / sections` 我的页面结构 |
+| 14 | `core_modules/iPadOS/mine.js` | iPadOS 独立入口数组的我的页面结构 |
+| 15 | `core_modules/iPadOS/ads.js` | iPadOS 大会员广告素材接口 |
+| 16 | `core_modules/Common/live-and-modes.js` | 直播广告、追踪参数、首页搜索页、青少年模式与交互式弹幕 |
+| 17 | `core_modules/Common/dynamic.js` | 动态关键词、UP 主推荐商品与「最常访问」列表 |
+| 18 | `core_modules/Common/home-feed.js` | iOS / iPadOS 共用的首页推荐页和首页热门过滤 |
+| 19 | `core_modules/Common/entry.js` | `main()` URL 路由与顶层异常兜底 |
 
-模块清单与构建顺序维护在 `build_bilibili_cleaner.js`。修改 `modules` 后必须执行：
+模块清单与构建顺序维护在 `build_bilibili_cleaner.js`。修改 `core_modules` 后必须执行：
 
 ```bash
 node build_bilibili_cleaner.js
@@ -72,14 +83,14 @@ node build_bilibili_cleaner.js --check
 路由判定要点：
 
 - 所有处理器都在响应阶段（`http-response`）执行；脚本通过 `$response` 读取响应体并改写。
-- **JSON 接口**（`/x/...`）和 **gRPC 接口**（`grpc.biliapi.net`）由不同的处理器解析。gRPC 响应在 Loon 中以 `binary-body-mode=true` 捕获，脚本读取的是 `bodyBytes`。
+- **JSON 接口**（`/x/...`）和 **gRPC 接口**（`grpc.biliapi.net`）由不同的处理器解析。gRPC 响应在 Loon 中以 `binary-body-mode=true` 捕获，官方运行时通过 `$response.body` 提供 `Uint8Array`；兼容层也支持部分测试环境的 `bodyBytes` 别名。
 - 部分接口（比如首页热门 `Popular/Index`）会同时匹配 `grpc.biliapi.net` 与 `app.bilibili.com` 两个域名。
 
 ## JSON 和 protobuf 两种响应
 
 ### JSON 响应
 
-首页推荐页、首页搜索页、开屏、启动资源、我的页面、视频推荐流（`feed/index/story`）等接口返回 JSON。具体步骤：
+首页推荐页、首页搜索页、开屏、启动资源、两端我的页面、iPadOS 大会员广告素材、视频推荐流（`feed/index/story`）等接口返回 JSON。具体步骤：
 
 1. `parseResponseJson()` 将响应体解析为对象。
 2. 遍历目标数组（比如 `data.items`、`data.tab`），按照规则标记哪些项要保留、哪些要移除。
@@ -87,7 +98,7 @@ node build_bilibili_cleaner.js --check
 
 ### gRPC / protobuf 响应
 
-首页热门、搜索结果、搜索候选词条、动态页、视频详情页、视频页推荐流等接口返回 protobuf gRPC。脚本不依赖 `.proto` 定义，而是用通用解析器按照字段号与 wire type 来处理。具体步骤：
+首页热门、搜索结果、搜索候选词条、动态页、视频详情页、视频页推荐流等接口返回 protobuf gRPC。iOS 使用 `bilibili.app.viewunite.v1.View`，iPadOS 抓包使用 `bilibili.app.view.v1.View`；两种 schema 由平台目录中的独立处理器解析。脚本不依赖 `.proto` 定义，而是用通用解析器按照字段号与 wire type 来处理。具体步骤：
 
 1. `decodeGrpcBody()` 去掉 5 字节 gRPC 帧头（1 字节压缩标记 + 4 字节大端长度），必要的时候解压 gzip。
 2. 用 protobuf 工具层定位并改写字段。
@@ -135,7 +146,7 @@ Tag 匹配分三级，优先复用已有数据来减少网络请求：
 
 ## 视频 Tag 缓存与深度屏蔽
 
-深度屏蔽开启后，视频详情页（`View`）响应中的话题 Tag 会被收集并写入缓存，供首页热门、首页推荐页、视频页推荐流和搜索结果普通视频在后续匹配中复用。
+深度屏蔽开启后，视频详情页（`View`）响应中的话题 Tag 会被收集并写入缓存，供首页热门、首页推荐页、视频页推荐流和搜索结果普通视频在后续匹配中复用。话题名称均读取 field 2；iOS `ViewUnite` 的话题链接常见于 field 3，iPadOS 旧版 `View` 的话题链接位于 field 7。
 
 缓存用到的常量：
 
@@ -169,7 +180,7 @@ Tag 匹配分三级，优先复用已有数据来减少网络请求：
 - `promotedContent`：商业推广内容。
 - `relatedAds`：普通广告卡片。
 
-`sanitizeVideoPageMessage()` 在改写消息树时按照字段位置（推荐流容器、横幅字段、UP 好物字段）调用上述判定并删除命中项。
+iOS 的 `sanitizeIosVideoPageMessage()` 按 `ViewUnite` 字段位置（推荐流容器、横幅字段、UP 好物字段）调用上述判定；iPadOS 的 `handleIpadViewResponse()` 则处理顶层 field 10 相关推荐和 field 41 独立商业素材。两端最终都复用同一套标题、UP 主、Tag 屏蔽规则与通知统计。
 
 ### 搜索结果
 
@@ -197,23 +208,26 @@ Tag 匹配分三级，优先复用已有数据来减少网络请求：
 
 - **结构缺失**：各处理器在响应数据不符合预期（比如缺少 `data`）时记录 info 日志并原样返回，不抛错。
 - **protobuf 解析**：`tryParseFields` 与多处 `try/catch` 保证局部解析失败不会中断整体流程。
-- **顶层兜底**：`main()` 外层 `.catch()` 捕获所有未处理异常，根据 URL 推断出页面名称后发送「脚本错误」通知，并确保调用 `$done()` 返回响应。
+- **顶层兜底**：`main()` 外层 `.catch()` 捕获所有未处理异常，根据 URL 推断出页面名称后发送「脚本错误」通知，并通过 `$done({})` 原样放行上游响应。
 
 ## 接口与处理器对照表
 
 | URL 特征（正则片段） | 处理器 | 响应类型 | 说明 |
 | --- | --- | --- | --- |
 | `/x/v2/splash/(show\|list\|brand/list\|brand/show\|event/list\|event/list2\|ad/list\|topview/list)?` | `handleSplashResponse` | JSON | `/splash/list` 返回 `"OK"`（非 JSON）以阻止创意缓存刷新；`/splash/show`、`/splash/event/list2` 只清空 `show`/`event_list`（保留会话字段）；其余开屏端点清空广告数组 |
-| `/x/resource/(show/tab/v2\|show/skin\|peak/download)?` | `handleStartupAdsResponse` | JSON | 首页游戏按钮与顶部分区、启动活动 Tab、皮肤装扮、预加载资源 |
-| `/x/v2/account/mine?` | `handleMinePageResponse` | JSON | 我的页面模块 |
+| `/x/resource/(show/tab/v2\|show/skin\|peak/download)?` | `handleStartupAdsResponse` | JSON | 两端首页游戏按钮、启动活动 Tab、皮肤装扮和预加载资源；顶部分区过滤仅调用 iOS 模块，iPadOS 不使用该代码 |
+| `/x/v2/account/mine?` | `handleIosMinePageResponse` | JSON | iOS 我的页面模块 |
+| `/x/v2/account/mine/ipad?` | `handleIpadMinePageResponse` | JSON | iPadOS 创作中心与我的服务入口组 |
+| `/x/vip/ads/materials?` | `handleIpadVipAdsMaterialsResponse` | JSON | iPadOS 大会员广告素材与登录浮层，与两端启动推广共用 `cleanStartupAds` 开关 |
 | `/x/v2/search/square?` | `handleSearchSquareResponse` | JSON | 首页搜索页模块 |
 | `bilibili.app.interface.v1.Search/DefaultWords` | `handleSearchDefaultWordsResponse` | gRPC | 搜索框滚动推荐词 |
 | `bilibili.app.interface.v1.Search/Suggest3` | `handleSearchSuggestResponse` | gRPC | 搜索候选词条 |
 | `bilibili.polymer.app.search.v1.Search/SearchAll` | `handleSearchAllResponse` | gRPC | 搜索结果 |
 | `/x/v2/feed/index/story?` | `handleVideoFeedIndex` | JSON | 视频推荐流（JSON 入口） |
 | `/x/v2/feed/index?` | `filterHomeFeedIndex` | JSON | 首页推荐页 |
-| `bilibili.app.viewunite.v1.View/View` | `handleViewResponse` | gRPC | 视频详情页，同时负责 Tag 缓存 |
-| `bilibili.app.viewunite.v1.View/RelatesFeed` | `handleRelatesFeedResponse` | gRPC | 视频页推荐流（gRPC 入口） |
+| `bilibili.app.viewunite.v1.View/View` | `handleIosViewResponse` | gRPC | iOS 视频详情页，同时负责 Tag 缓存 |
+| `bilibili.app.viewunite.v1.View/RelatesFeed` | `handleIosRelatesFeedResponse` | gRPC | iOS 视频页推荐流（gRPC 入口） |
+| `bilibili.app.view.v1.View/View` | `handleIpadViewResponse` | gRPC | iPadOS 旧版视频详情页、相关推荐与 Tag 缓存 |
 | `bilibili.app.dynamic.v2.Dynamic/DynAll` | `handleDynamicAllResponse` | gRPC | 动态页，同时控制「最常访问」列表是否显示 |
 | `bilibili.main.community.reply.v1.Reply/MainList` | `handleReplyMainListResponse` | gRPC | 评论区置顶广告 |
 | `api.live.bilibili.com/xlive/.../feed|getInfoByRoom|getInfoByUser|get_shopping_info` | `handleLiveAdsResponse` | JSON | 直播间信息流、房间页广告以及电商购物信息 |
@@ -232,7 +246,7 @@ Tag 匹配分三级，优先复用已有数据来减少网络请求：
 | `chat.bilibili.com` stun/tracker REJECT | 拦截 WebRTC stun 追踪请求 |
 ## 测试
 
-测试按功能拆分为 `testcases/*.test.js`。`test_context.js` 提供轻量测试注册器、匿名化样本和 VM 运行环境，`run_bilibili_cleaner_tests.js` 自动发现测试套件并依次执行。VM 会注入模拟的 `$request`、`$response`、`$persistentStore`、`$httpClient` 等对象，对返回的响应和通知做断言，覆盖各接口的屏蔽、清理、缓存以及并发行为。
+测试按功能拆分为 `testcases/*.test.js`。`test_context.js` 提供轻量测试注册器、匿名化样本和 VM 运行环境，`run_bilibili_cleaner_tests.js` 自动发现测试套件并依次执行。VM 会注入模拟的 `$request`、`$response`、`$persistentStore`、`$httpClient` 等对象，对返回的响应和通知做断言，覆盖各接口的屏蔽、清理、缓存以及并发行为。`ipados.test.js` 另外覆盖旧版 View 字段、iPad 首页卡片类型、首页顶部分区平台隔离、`mine/ipad` 与大会员广告素材结构。
 
 运行：
 
@@ -254,10 +268,10 @@ python3 -m http.server 8787 --bind 0.0.0.0
 局域网测试时使用 `bilibili` 项目根目录的 `bilibili_cleaner.lan.lpx`，该文件随仓库维护，保留本机 HTTP `script-path`，入口和参数必须与正式版保持同步。当前脚本地址示例（请把 `<局域网 IP>` 换成本机 IP）：
 
 ```text
-http://<局域网 IP>:8787/bilibili_cleaner.js?v=20260717-109
+http://<局域网 IP>:8787/bilibili_cleaner.js?v=20260726-112
 ```
 
-如果本机局域网 IP 变了，只改 LAN 版 `script-path` 的主机部分即可；其他配置仍然和正式版保持一致。修改脚本后，需要确认正式版和 LAN 版脚本地址的版本号都已更新。
+如果本机局域网 IP 或测试端口变了，只改 LAN 版 `script-path` 的主机或端口部分即可；其他配置仍然和正式版保持一致。修改脚本后，需要确认正式版和 LAN 版脚本地址的版本号都已更新。
 
 ## 配置同步
 
@@ -265,7 +279,7 @@ http://<局域网 IP>:8787/bilibili_cleaner.js?v=20260717-109
 
 - `#!desc` 全文，包含 `注：` 之后的说明。
 - `[Argument]` 参数定义。
-- `[Script]` 入口、正则、参数列表、`requires-body` 和 `binary-body-mode`。
+- `[Script]` 入口、正则、参数列表、`enable`、`requires-body` 和 `binary-body-mode`。
 - `[MitM]` 域名列表。
 - 脚本地址版本号。
 

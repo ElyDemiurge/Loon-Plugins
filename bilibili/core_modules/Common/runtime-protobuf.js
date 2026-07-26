@@ -1,8 +1,9 @@
+// core_modules/Common: byte, gRPC, and protobuf runtime shared by iOS and iPadOS.
 /* -------------------------------------------------------------------------- */
-/* 字节、gRPC 与 protobuf 基础工具                                            */
+/* Byte, gRPC, and protobuf primitives                                        */
 /* -------------------------------------------------------------------------- */
 
-// 解压 gzip 编码的字节数据。优先使用 Loon 运行时提供的解压能力，不可用时回退到 Node.js 的 zlib 模块。
+// Gunzip bytes with Loon utilities first and Node.js zlib as a test fallback.
 function gunzip(bytes) {
   bytes = toBytes(bytes);
   if (typeof $utils !== "undefined" && typeof $utils.ungzip === "function") {
@@ -14,7 +15,7 @@ function gunzip(bytes) {
   throw new Error("gzip is unavailable in this runtime");
 }
 
-// 将多种二进制输入格式统一转换为 Uint8Array，包括 ArrayBuffer、TypedArray、普通数组与字符串。
+// Normalize supported binary inputs to Uint8Array.
 function toBytes(value) {
   if (value instanceof Uint8Array) return value;
   if (value instanceof ArrayBuffer) return new Uint8Array(value);
@@ -24,7 +25,7 @@ function toBytes(value) {
   throw new Error(`unsupported bytes type: ${Object.prototype.toString.call(value)}`);
 }
 
-// 从 protobuf 编码的字节流中读取一个 varint，返回解析出的数值以及读取结束后的字节偏移位置。
+// Read a protobuf varint and return its value and ending offset.
 function readVarint(buffer, offset) {
   let value = 0;
   let shift = 0;
@@ -39,7 +40,7 @@ function readVarint(buffer, offset) {
   throw new Error("truncated varint");
 }
 
-// 根据 wire type 跳过当前 protobuf 字段的值部分，返回下一个字段的起始偏移位置。
+// Skip a protobuf value by wire type and return the next field offset.
 function skipValue(buffer, offset, wireType) {
   switch (wireType) {
     case 0:
@@ -57,7 +58,7 @@ function skipValue(buffer, offset, wireType) {
   }
 }
 
-// 将一段 protobuf 字节解析为字段列表，每个字段包含字段编号、wire type 以及原始字节范围。
+// Parse protobuf bytes into fields with numbers, wire types, and raw byte ranges.
 function parseFields(buffer) {
   const fields = [];
   let offset = 0;
@@ -89,7 +90,7 @@ function parseFields(buffer) {
   return fields;
 }
 
-// 将多个字节数组按顺序拼接为单一的 Uint8Array。
+// Concatenate byte arrays into one Uint8Array.
 function concat(chunks) {
   const length = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   const output = new Uint8Array(length);
@@ -101,10 +102,10 @@ function concat(chunks) {
   return output;
 }
 
-// 全局复用的 UTF-8 文本解码器实例。
+// Shared UTF-8 decoder instance.
 const decoder = new TextDecoder("utf-8");
 
-// 将字节按 UTF-8 解码为字符串，解码过程出错时返回空字符串以避免中断后续逻辑。
+// Decode UTF-8 bytes and return an empty string on failure.
 function decodeString(bytes) {
   try {
     return decoder.decode(bytes);
@@ -113,7 +114,7 @@ function decodeString(bytes) {
   }
 }
 
-// 读取指定字段编号下所有 wire type 2 字段的字符串值，自动过滤掉空字符串。
+// Read non-empty string values from wire-type-2 fields with a given number.
 function fieldStrings(fields, no) {
   return fields
     .filter((field) => field.no === no && field.wireType === 2)
@@ -121,12 +122,12 @@ function fieldStrings(fields, no) {
     .filter(Boolean);
 }
 
-// 返回指定字段编号下首个嵌套消息的原始字节，找不到时返回 null。
+// Return the first nested-message value for a field number.
 function firstMessage(fields, no) {
   return fields.find((field) => field.no === no && field.wireType === 2)?.value || null;
 }
 
-// 从首页热门卡片中提取标题、UP 名称与 aid，同时会补入分享元数据中的补充文本信息。
+// Extract titles, creator names, and aid from a popular-page card and its share metadata.
 function extractCardText(cardBytes) {
   const result = { titles: [], upNames: [], aid: extractAidFromText(decodeString(cardBytes)) };
 
@@ -144,7 +145,7 @@ function extractCardText(cardBytes) {
   result.aid = extractAidFromText(fieldStrings(base, 2).join(" ")) || result.aid;
   result.titles.push(...fieldStrings(base, 6));
 
-  // iOS 首页热门的分享元数据中同样带有标题与 UP，一并补入。
+  // iOS share metadata also carries titles and creator names.
   for (const share of base.filter((field) => field.no === 18 && field.wireType === 2)) {
     try {
       const shareFields = parseFields(share.value);
@@ -161,7 +162,7 @@ function extractCardText(cardBytes) {
   return result;
 }
 
-// 从任意文本中提取视频 aid，兼容 Bilibili 内部链接、URL 查询参数以及 JSON 中的多种 aid 表示形式。
+// Extract a video aid from Bilibili URIs, query strings, or JSON text.
 function extractAidFromText(text) {
   const value = String(text || "");
   const match = value.match(/bilibili:\/\/(?:video|story)\/(\d+)/)
@@ -175,12 +176,12 @@ function extractAidFromText(text) {
   return typedVideoIdMatch ? typedVideoIdMatch[1] : "";
 }
 
-// 规范化 UP 主名称：去除 "UP主：" 或 "频道：" 等前缀，并将连续的空白字符合并为单个空格。
+// Normalize creator names by removing known prefixes and collapsing whitespace.
 function normalizeUpName(value) {
   return String(value || "").replace(/^(UP主|频道)[:：]/, "").replace(/\s+/g, " ").trim();
 }
 
-// 判断指定类别的通知开关是否开启。传入数组时，只要数组中的任意一项对应的开关开启即返回 true。
+// Check whether a notification category is enabled; arrays use any-match semantics.
 function notificationEnabled(category) {
   if (Array.isArray(category)) return category.some((item) => notificationEnabled(item));
   if (category === "remove") return arg.notifyRemove;
@@ -189,7 +190,7 @@ function notificationEnabled(category) {
   return arg.notifyRemove || arg.notifyFilter || arg.notifyPersonalization;
 }
 
-// 将通知内容同步写入脚本的运行日志，便于在系统弹窗之外留存排查记录。
+// Mirror notification content to the script log for diagnostics.
 function logNotification(title, subtitle, message, attach) {
   const lines = [`[BilibiliFilter][notify] ${title || ""}`];
   if (subtitle) lines.push(String(subtitle));
@@ -198,7 +199,7 @@ function logNotification(title, subtitle, message, attach) {
   console.log(lines.join("\n"));
 }
 
-// 在对应类别的通知开关开启时发送系统通知，并同步记录到脚本日志中。
+// Send a system notification and log it when its category is enabled.
 function notify(category, title, subtitle, message, attach) {
   if (!notificationEnabled(category)) return;
   logNotification(title, subtitle, message, attach);
@@ -215,8 +216,8 @@ function notify(category, title, subtitle, message, attach) {
   }
 }
 
-// 对同时包含“清理”和“屏蔽”的处理结果按实际命中类别发送通知。
-// 两类都命中且两类通知都开启时保留合并通知；只开启其中一类时仅展示该类别的结果。
+// Route combined cleanup and blocking results according to the categories that actually matched.
+// Keep a combined notification only when both categories matched and are enabled.
 function notifyCleanupAndFilter({
   cleaned,
   blocked,
@@ -250,7 +251,7 @@ function notifyCleanupAndFilter({
   return post(emptyCategory, empty);
 }
 
-// 解码 gRPC 响应体：解析 5 字节帧头以获取消息长度与压缩标记，必要时对消息体执行 gzip 解压。
+// Decode a five-byte gRPC frame header and gunzip compressed messages.
 function decodeGrpcBody(bodyBytes) {
   bodyBytes = toBytes(bodyBytes);
   if (!bodyBytes || bodyBytes.length < 5) throw new Error("invalid grpc body");
@@ -261,7 +262,7 @@ function decodeGrpcBody(bodyBytes) {
   return compressed ? gunzip(message) : message;
 }
 
-// 将消息体编码为 gRPC 帧格式：写入不压缩标记（0），后接 4 字节大端序消息长度。
+// Encode an uncompressed gRPC frame with a four-byte big-endian length.
 function encodeGrpcBody(message) {
   const output = new Uint8Array(5 + message.length);
   output[0] = 0;
@@ -273,20 +274,20 @@ function encodeGrpcBody(message) {
   return output;
 }
 
-// 读取当前响应体并转换为字节数组，兼容 bodyBytes 与 body 两种字段名。
+// Read the current response body as bytes from bodyBytes or body.
 function getResponseBodyBytes() {
   if ($response.bodyBytes !== undefined) return toBytes($response.bodyBytes);
   if ($response.body !== undefined) return toBytes($response.body);
   throw new Error("response body is unavailable");
 }
 
-// 读取当前响应体文本。
+// Read the current response body as text.
 function getResponseBodyText() {
   if (typeof $response.body === "string") return $response.body;
   return decoder.decode(getResponseBodyBytes());
 }
 
-// 安全地读取请求体字节，读取过程中遇到任何错误都返回 undefined 而不抛出异常。
+// Safely read request-body bytes and return undefined on failure.
 function getRequestBodyBytesSafely() {
   if (typeof $request === "undefined" || !$request) return undefined;
   try {
@@ -297,7 +298,7 @@ function getRequestBodyBytesSafely() {
   return undefined;
 }
 
-// 安全地读取请求体内容，读取失败时返回 undefined 而不中断流程。
+// Safely read the request body without interrupting the main flow.
 function getRequestBodySafely() {
   if (typeof $request === "undefined" || !$request) return undefined;
   try {
@@ -308,21 +309,61 @@ function getRequestBodySafely() {
   }
 }
 
-// 将字节数据写回响应体，按照运行环境支持的字段名写入（优先 bodyBytes，否则 body）。
-function setResponseBodyBytes(bytes) {
-  if ($response.bodyBytes !== undefined) {
-    $response.bodyBytes = bytes;
-  } else {
-    $response.body = bytes;
+// Hold a response-body patch until the handler finishes successfully.
+let pendingResponseBody;
+let hasPendingResponseBody = false;
+
+// Compare a candidate body with the original response body.
+function isOriginalResponseBody(body) {
+  try {
+    if (typeof body === "string" && typeof $response.body === "string") {
+      return body === $response.body;
+    }
+    const candidate = toBytes(body);
+    const original = getResponseBodyBytes();
+    if (candidate.length !== original.length) return false;
+    for (let index = 0; index < candidate.length; index += 1) {
+      if (candidate[index] !== original[index]) return false;
+    }
+    return true;
+  } catch {
+    return false;
   }
 }
 
-// 将文本直接写回响应体 body 字段。
-function setResponseBodyText(text) {
-  $response.body = text;
+// Stage a response body only when it differs from the original body.
+function stageResponseBody(body) {
+  if (isOriginalResponseBody(body)) {
+    pendingResponseBody = undefined;
+    hasPendingResponseBody = false;
+    return;
+  }
+  pendingResponseBody = body;
+  hasPendingResponseBody = true;
 }
 
-// 读取当前请求的完整 URL，在没有请求上下文时返回空字符串。
+// Stage binary response bytes without mutating the original Loon response.
+function setResponseBodyBytes(bytes) {
+  stageResponseBody(toBytes(bytes));
+}
+
+// Stage a text response body without mutating the original Loon response.
+function setResponseBodyText(text) {
+  stageResponseBody(String(text));
+}
+
+// Continue with the original response unchanged.
+function finishUnchanged() {
+  return $done({});
+}
+
+// Return only the staged body patch and let Loon preserve other response fields.
+function finishResponse() {
+  if (!hasPendingResponseBody) return finishUnchanged();
+  return $done({ body: pendingResponseBody });
+}
+
+// Return the current request URL or an empty string.
 function getRequestUrl() {
   return (typeof $request !== "undefined" && $request && $request.url) || "";
 }

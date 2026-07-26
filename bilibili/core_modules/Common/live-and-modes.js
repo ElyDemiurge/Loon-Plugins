@@ -1,19 +1,20 @@
 /*
- * 处理直播页面、追踪参数、首页搜索页，以及青少年模式和交互式弹幕接口。
+ * core_modules/Common: live, tracking, search-page, and mode handlers shared by both platforms.
+ * Covers live pages, tracking parameters, home search, teenager mode, and interactive danmaku.
  */
 
 /* -------------------------------------------------------------------------- */
-/* 直播间广告清理                                                             */
+/* Live-room advertisement cleanup                                            */
 /* -------------------------------------------------------------------------- */
 
-// 直播信息流中承载卡片列表的常见字段名。
+// Common field names that contain live-feed cards.
 const LIVE_FEED_ARRAY_KEYS = ["card_list", "list", "items", "rooms"];
-// 直播卡片中的广告标记：card_type 命中 ad、banner_card 或 cm_v2。
+// Advertisement markers used by live cards.
 const LIVE_AD_CARD_TYPE_PATTERN = /(?:^|_)ad(?:_|$)|banner_card|cm_v2/i;
-// 直播房间页中需要被删除的广告字段名。
+// Advertisement fields removed from live-room responses.
 const LIVE_ROOM_AD_KEYS = ["banner_info", "activity_banner_info", "shopping_card_info", "ad_banner_info"];
 
-// 判断直播信息流中的卡片是否为广告。
+// Detect an advertisement card in the live feed.
 function isLiveAdCard(card) {
   if (!card || typeof card !== "object") return false;
   const type = String(card.card_type || card.type || "");
@@ -21,12 +22,12 @@ function isLiveAdCard(card) {
   return !!card.ad_info || card.is_ad === true || card.is_ad === 1;
 }
 
-// 创建直播间广告清理的统计对象。
+// Create live-ad cleanup statistics.
 function liveCleanupSummary() {
   return { feedAds: [], roomAdFields: [] };
 }
 
-// 生成直播间广告清理的系统通知副标题。
+// Build the live-ad notification subtitle.
 function liveNotifySubtitle(summary) {
   const parts = [];
   if (summary.feedAds.length) parts.push(`清理信息流广告 ${summary.feedAds.length}`);
@@ -34,7 +35,7 @@ function liveNotifySubtitle(summary) {
   return parts.length ? parts.join(" / ") : "未命中";
 }
 
-// 生成直播间广告清理的系统通知正文。
+// Build the live-ad notification message.
 function liveNotifyMessage(summary) {
   if (!summary.feedAds.length && !summary.roomAdFields.length) return "未命中直播间广告";
   const lines = [];
@@ -43,27 +44,27 @@ function liveNotifyMessage(summary) {
   return lines.length ? lines.join("\n") : "未命中直播间广告";
 }
 
-// 处理直播间广告的 HTTP 响应：信息流响应中移除广告卡片，房间页响应中删除广告字段。
+// Remove advertisement cards from live feeds and advertisement fields from room responses.
 function handleLiveAdsResponse() {
   if (!arg.cleanLiveAds) {
     log("info", { page: "live", message: "switch off" });
-    return $done({ response: $response });
+    return finishUnchanged();
   }
 
   const url = getRequestUrl();
-  // 直播电商购物信息：直接返回空响应（reject）。
+  // Return the minimal rejection response for live-commerce shopping data.
   if (/\/xlive\/e-commerce-interface\/v1\/ecommerce-user\/get_shopping_info\?/.test(url)) {
     setResponseBodyText(REJECT_RESPONSE_BODY);
     log("info", { page: "live", endpoint: "shoppingInfo", rejected: true });
     notify("remove", "Bilibili 直播间广告清理", "清理直播电商购物信息", "移除-直播间广告：电商购物信息");
-    return $done({ response: $response });
+    return finishResponse();
   }
 
   const json = parseResponseJson();
   const data = json?.data;
   if (!data || typeof data !== "object") {
     log("info", { page: "live", message: "data not found" });
-    return $done({ response: $response });
+    return finishResponse();
   }
 
   const summary = liveCleanupSummary();
@@ -97,28 +98,28 @@ function handleLiveAdsResponse() {
     liveNotifySubtitle(summary),
     liveNotifyMessage(summary)
   );
-  $done({ response: $response });
+  finishResponse();
 }
 
 /* -------------------------------------------------------------------------- */
-/* 追踪参数（从声明式特性迁移为 JavaScript，支持开关控制）                   */
+/* Tracking parameters controlled by JavaScript switches                      */
 /* -------------------------------------------------------------------------- */
 
-// pd-proxy/tracker 改写后的失效 STUN / 追踪服务器地址。
+// Disabled STUN and tracking endpoint used to rewrite pd-proxy/tracker data.
 const PD_PROXY_DEAD_STUN = "stun.chat.bilibili.com:3478";
 
-// 处理 pd-proxy/tracker 响应：将 data 下所有数组中的字符串元素改写为失效地址，阻断 WebRTC 追踪。
+// Rewrite string values in pd-proxy/tracker arrays to disable WebRTC tracking.
 function handlePdProxyTrackerResponse() {
   if (!arg.blockTrackers) {
     log("info", { page: "pdProxy", message: "switch off" });
-    return $done({ response: $response });
+    return finishUnchanged();
   }
 
   const json = parseResponseJson();
   const data = json?.data;
   if (!data || typeof data !== "object") {
     log("info", { page: "pdProxy", message: "data not found" });
-    return $done({ response: $response });
+    return finishResponse();
   }
 
   let rewritten = 0;
@@ -140,15 +141,15 @@ function handlePdProxyTrackerResponse() {
     rewritten ? `改写追踪服务器 ${rewritten}` : "未命中追踪参数",
     rewritten ? "屏蔽-追踪与数据上报：已改写 STUN/追踪服务器" : "未命中追踪参数"
   );
-  $done({ response: $response });
+  finishResponse();
 }
 
-// 处理首页搜索页响应，移除热搜、搜索历史以及搜索发现等模块。
+// Handle the home-search response and remove configured modules.
 function handleSearchSquareResponse() {
   const json = parseResponseJson();
   if (!Array.isArray(json?.data)) {
     log("info", { page: "searchSquare", message: "data not found" });
-    return $done({ response: $response });
+    return finishResponse();
   }
 
   const removedModules = [];
@@ -177,10 +178,10 @@ function handleSearchSquareResponse() {
     notifyPayload.subtitle,
     notifyPayload.message
   );
-  $done({ response: $response });
+  finishResponse();
 }
 
-// 汇总搜索框推荐词的系统通知完整内容。
+// Build the complete default-search-word notification payload.
 function searchDefaultWordsNotifyPayload(words, cleaned) {
   return {
     title: "Bilibili 搜索框推荐词移除",
@@ -189,8 +190,13 @@ function searchDefaultWordsNotifyPayload(words, cleaned) {
   };
 }
 
-// 处理搜索框默认词（DefaultWords）的 gRPC 响应，根据功能开关清空默认词内容。
+// Handle DefaultWords and clear its content when enabled.
 function handleSearchDefaultWordsResponse() {
+  if (!arg.cleanSearchDefaultWords) {
+    log("info", { page: "searchDefaultWords", message: "switch off" });
+    return finishUnchanged();
+  }
+
   const message = decodeGrpcBody(getResponseBodyBytes());
   const fields = parseFields(message);
   const words = uniqueStrings([
@@ -198,14 +204,12 @@ function handleSearchDefaultWordsResponse() {
     ...fieldStrings(fields, 4),
   ]);
 
-  if (arg.cleanSearchDefaultWords) {
-    setResponseBodyBytes(encodeGrpcBody(new Uint8Array()));
-  }
+  setResponseBodyBytes(encodeGrpcBody(new Uint8Array()));
 
-  const notifyPayload = searchDefaultWordsNotifyPayload(words, arg.cleanSearchDefaultWords);
+  const notifyPayload = searchDefaultWordsNotifyPayload(words, true);
   log("info", {
     page: "searchDefaultWords",
-    cleaned: arg.cleanSearchDefaultWords,
+    cleaned: true,
     words,
   });
   notify(
@@ -214,31 +218,31 @@ function handleSearchDefaultWordsResponse() {
     notifyPayload.subtitle,
     notifyPayload.message
   );
-  $done({ response: $response });
+  finishResponse();
 }
 
-// 处理青少年模式（Teenagers/ModeStatus）的 gRPC 响应：开关开启时 mock 为关闭状态，避免出现青少年模式弹窗。
+// Mock Teenagers/ModeStatus as disabled when the corresponding switch is enabled.
 function handleTeenagersResponse() {
   if (!arg.cleanTeenagersMode) {
     log("info", { page: "teenagers", message: "switch off" });
-    return $done({ response: $response });
+    return finishUnchanged();
   }
 
   setResponseBodyBytes(TEENAGERS_MODE_OFF_BYTES);
   log("info", { page: "teenagers", closed: true });
   notify("remove", "Bilibili 青少年模式", "已关闭青少年模式弹窗", "移除-青少年模式弹窗");
-  $done({ response: $response });
+  finishResponse();
 }
 
-// 处理交互式弹幕（TFInfo / PlayPause / ViewEndPage）的 gRPC 响应：开关开启时 mock 为空消息。
+// Mock interactive-danmaku responses as an empty gRPC message when enabled.
 function handleInteractiveDanmakuResponse() {
   if (!arg.cleanInteractiveDanmaku) {
     log("info", { page: "interactiveDanmaku", message: "switch off" });
-    return $done({ response: $response });
+    return finishUnchanged();
   }
 
   setResponseBodyBytes(INTERACTIVE_DANMAKU_EMPTY_BYTES);
   log("info", { page: "interactiveDanmaku", cleared: true });
   notify("remove", "Bilibili 交互式弹幕", "已移除交互式弹幕", "移除-交互式弹幕");
-  $done({ response: $response });
+  finishResponse();
 }

@@ -1,8 +1,9 @@
+// core_modules/Common: shared router dispatching to Common, iOS, and iPadOS handlers.
 /* -------------------------------------------------------------------------- */
-/* 路由入口                                                                   */
+/* Route entry point                                                          */
 /* -------------------------------------------------------------------------- */
 
-// 主路由函数：根据请求 URL 将响应分发到对应的处理器。未能匹配特定路由时原样返回响应。
+// Dispatch a response by request URL and preserve unmatched responses unchanged.
 async function main() {
   const url = getRequestUrl();
   if (/\/x\/v2\/splash\/(?:show|list|brand\/list|brand\/show|event\/list|event\/list2|ad\/list|topview\/list)\?/.test(url)) {
@@ -13,8 +14,16 @@ async function main() {
     return handleStartupAdsResponse();
   }
 
+  if (/\/x\/v2\/account\/mine\/ipad\?/.test(url)) {
+    return handleIpadMinePageResponse();
+  }
+
   if (/\/x\/v2\/account\/mine\?/.test(url)) {
-    return handleMinePageResponse();
+    return handleIosMinePageResponse();
+  }
+
+  if (/\/x\/vip\/ads\/materials\?/.test(url)) {
+    return handleIpadVipAdsMaterialsResponse();
   }
 
   if (/\/x\/v2\/search\/square\?/.test(url)) {
@@ -42,11 +51,15 @@ async function main() {
   }
 
   if (/\/bilibili\.app\.viewunite\.v1\.View\/View$/.test(url)) {
-    return handleViewResponse();
+    return handleIosViewResponse();
   }
 
   if (/\/bilibili\.app\.viewunite\.v1\.View\/RelatesFeed$/.test(url)) {
-    return handleRelatesFeedResponse();
+    return handleIosRelatesFeedResponse();
+  }
+
+  if (/\/bilibili\.app\.view\.v1\.View\/View$/.test(url)) {
+    return handleIpadViewResponse();
   }
 
   if (/\/bilibili\.app\.dynamic\.v2\.Dynamic\/DynAll$/.test(url)) {
@@ -78,14 +91,14 @@ async function main() {
   }
 
   log("debug", { page: "router", message: "unmatched route", url });
-  return $done(typeof $response !== "undefined" ? { response: $response } : {});
+  return finishUnchanged();
 }
 
-// 脚本执行入口：运行主流程，发生异常时输出错误通知，避免脚本崩溃后无任何响应。
+// Run the main flow and always release the response after reporting an unexpected error.
 Promise.resolve(main()).catch((error) => {
   const url = getRequestUrl();
   const pageName = (() => {
-    if (/\/bilibili\.app\.viewunite\.v1\.View\//.test(url)) return "视频页";
+    if (/\/bilibili\.app\.(?:view|viewunite)\.v1\.View\//.test(url)) return "视频页";
     if (/\/bilibili\.app\.dynamic\.v2\.Dynamic\/DynAll$/.test(url)) return "动态页";
     if (/\/x\/v2\/splash\//.test(url)) return "开屏广告";
     if (/\/bilibili\.app\.interface\.v1\.Search\/Suggest3$/.test(url)) return "搜索候选词条";
@@ -95,11 +108,12 @@ Promise.resolve(main()).catch((error) => {
     if (/\/x\/pd-proxy\/tracker/.test(url)) return "追踪";
     if (/Teenagers\/ModeStatus/.test(url)) return "青少年模式";
     if (/View\/TFInfo|PlayPause|ViewEndPage/.test(url)) return "交互弹幕";
-    if (/\/x\/v2\/account\/mine\?/.test(url)) return "我的页面";
+    if (/\/x\/v2\/account\/mine(?:\/ipad)?\?/.test(url)) return "我的页面";
+    if (/\/x\/vip\/ads\/materials\?/.test(url)) return "大会员广告素材";
     if (/\/x\/v2\/feed\/index/.test(url)) return "首页推荐页";
     return "首页热门";
   })();
   log("error", error);
   notify(["remove", "filter"], `Bilibili ${pageName}处理`, "脚本错误", stringify(error).slice(0, 180));
-  $done(typeof $response !== "undefined" ? { response: $response } : {});
+  finishUnchanged();
 });

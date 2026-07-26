@@ -3,6 +3,7 @@ const {
   notifyingArgument,
   runPlugin,
   assertNotification,
+  assertUnchangedResponse,
   splashShowFixtureBody,
   splashListFixtureBody,
   splashBrandListFixtureBody,
@@ -14,7 +15,7 @@ const {
 } = require("./test_context");
 
 /* -------------------------------------------------------------------------- */
-/* 开屏广告                                                                   */
+/* Splash advertisements                                                      */
 /* -------------------------------------------------------------------------- */
 
 test("开屏广告：show 入口会清空展示列表", async () => {
@@ -150,7 +151,8 @@ test("开屏广告：关闭开关时保留原响应", async () => {
   assert.equal(body.data.show.length, 1);
   assert.equal(body.data.list.length, 1);
   assert.deepEqual(body.data.keep_ids, [100001]);
-  assertNotification(result, "已关闭");
+  assertUnchangedResponse(result);
+  assert.equal(result.notifications.length, 0);
 });
 
 test("弹窗开关：关闭移除弹窗不影响开屏广告清理", async () => {
