@@ -12,10 +12,6 @@ const {
   test,
 } = require("./test_context");
 
-/* -------------------------------------------------------------------------- */
-/* Replies, live rooms, and frequent dynamic creators                         */
-/* -------------------------------------------------------------------------- */
-
 function replyMainListFixtureBody() {
   return encodeGrpc(Buffer.concat([
     messageField(5, [

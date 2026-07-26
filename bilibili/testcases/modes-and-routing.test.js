@@ -8,10 +8,6 @@ const {
   test,
 } = require("./test_context");
 
-/* -------------------------------------------------------------------------- */
-/* Live commerce, tracking, teenager mode, and interactive danmaku            */
-/* -------------------------------------------------------------------------- */
-
 test("直播间：电商购物信息返回空响应", async () => {
   const result = await runPlugin({
     url: "https://api.live.bilibili.com/xlive/e-commerce-interface/v1/ecommerce-user/get_shopping_info?test=1",

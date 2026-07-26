@@ -13,10 +13,6 @@ const {
   test,
 } = require("./test_context");
 
-/* -------------------------------------------------------------------------- */
-/* Video pages and related feeds                                              */
-/* -------------------------------------------------------------------------- */
-
 test("视频页：清理推荐流推广内容、广告、直播、横幅和好物", async () => {
   const result = await runPlugin({
     url: "https://grpc.biliapi.net/bilibili.app.viewunite.v1.View/View",

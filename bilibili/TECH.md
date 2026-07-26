@@ -37,7 +37,7 @@
 
 维护源码位于 `core_modules`，按 `Common`、`iOS`、`iPadOS` 区分共用和平台专属代码。根目录的 `build_bilibili_cleaner.js` 按依赖顺序将模块拼接为 Loon 实际加载的 `bilibili_cleaner.js`。脚本入口在最后一个模块 `entry.js`：调用异步函数 `main()`，并通过 `.catch()` 兜底，保证任何异常都会调用 `$done()` 并返回响应，避免脚本崩溃后请求被挂起。
 
-插件配置遵循 Loon 官方插件与脚本 API 约定：`[Argument]` 中声明的参数通过每条规则的 `argument=[{...}]` 显式传入；需要读取 gRPC 响应的路由同时声明 `requires-body=true` 与 `binary-body-mode=true`；单一开关控制的路由通过 `enable={开关}` 在关闭时跳过脚本。固定输出字节且不读取上游响应的青少年模式和交互式弹幕路由不请求响应体。
+插件配置遵循 Loon 官方[插件手册](https://nsloon.app/docs/Plugin/)与[脚本手册](https://nsloon.app/docs/Script/)：`[Argument]` 中声明的参数按处理器需要通过每条规则的 `argument=[{...}]` 传入，未使用的参数不重复传递；需要读取 gRPC 响应的路由同时声明 `requires-body=true` 与 `binary-body-mode=true`；单一开关控制的路由通过 `enable={开关}` 在关闭时跳过脚本。固定输出字节且不读取上游响应的青少年模式和交互式弹幕路由不请求响应体。
 
 响应体改写采用延迟提交：`setResponseBodyText()` 与 `setResponseBodyBytes()` 只暂存候选 body，并和原始 body 比较。没有变化时 `finishResponse()` 调用 `$done({})` 原样放行；存在变化时只调用 `$done({body: ...})`。顶层异常兜底同样使用 `$done({})`，不会返回可能只完成了一部分的候选改写。
 
@@ -52,7 +52,7 @@
 | 3 | `core_modules/Common/filter-rules.js` | 标题、UP 主、内容关键词与视频 Tag 的统一匹配流程 |
 | 4 | `core_modules/Common/tag-cache.js` | 持久化 Tag 缓存、远端 Tag 请求、去重与淘汰 |
 | 5 | `core_modules/Common/protobuf-tools.js` | aid、话题 Tag 与 protobuf 消息树的共用读取和改写工具 |
-| 6 | `core_modules/Common/video-search.js` | 两端共用的视频统计、广告识别、推荐流和搜索处理 |
+| 6 | `core_modules/Common/video-search.js` | 两端共用的视频统计、广告识别、详情页收尾、推荐流和搜索处理 |
 | 7 | `core_modules/iOS/video.js` | iOS `ViewUnite` 视频详情页与 `RelatesFeed` 结构 |
 | 8 | `core_modules/iPadOS/video.js` | iPadOS 旧版 `View` 视频详情页结构 |
 | 9 | `core_modules/Common/reply.js` | 评论区置顶广告识别与清理 |
@@ -64,7 +64,7 @@
 | 15 | `core_modules/iPadOS/ads.js` | iPadOS 大会员广告素材接口 |
 | 16 | `core_modules/Common/live-and-modes.js` | 直播广告、追踪参数、首页搜索页、青少年模式与交互式弹幕 |
 | 17 | `core_modules/Common/dynamic.js` | 动态关键词、UP 主推荐商品与「最常访问」列表 |
-| 18 | `core_modules/Common/home-feed.js` | iOS / iPadOS 共用的首页推荐页和首页热门过滤 |
+| 18 | `core_modules/Common/home-feed.js` | iOS 与 iPadOS 共用的首页推荐页和首页热门过滤 |
 | 19 | `core_modules/Common/entry.js` | `main()` URL 路由与顶层异常兜底 |
 
 模块清单与构建顺序维护在 `build_bilibili_cleaner.js`。修改 `core_modules` 后必须执行：
@@ -180,7 +180,7 @@ Tag 匹配分三级，优先复用已有数据来减少网络请求：
 - `promotedContent`：商业推广内容。
 - `relatedAds`：普通广告卡片。
 
-iOS 的 `sanitizeIosVideoPageMessage()` 按 `ViewUnite` 字段位置（推荐流容器、横幅字段、UP 好物字段）调用上述判定；iPadOS 的 `handleIpadViewResponse()` 则处理顶层 field 10 相关推荐和 field 41 独立商业素材。两端最终都复用同一套标题、UP 主、Tag 屏蔽规则与通知统计。
+iOS 的 `sanitizeIosVideoPageMessage()` 按 `ViewUnite` 字段位置（推荐流容器、横幅字段、UP 好物字段）调用上述判定；iPadOS 的 `handleIpadViewResponse()` 则处理顶层 field 10 相关推荐和 field 41 独立商业素材。两端最终都复用同一套标题、UP 主、Tag 屏蔽规则与通知统计。当前横幅字段和 UP 好物字段只存在于已适配的 iOS `ViewUnite` 结构，因此对应参数在插件界面标记为 `[iOS]`；广告卡片、推广内容与直播推荐仍为两端共用参数。
 
 ### 搜索结果
 
@@ -244,14 +244,14 @@ iOS 的 `sanitizeIosVideoPageMessage()` 按 `ViewUnite` 字段位置（推荐流
 | --- | --- |
 | `api/app.biliapi.com|net` REJECT | 拦截数据上报/追踪域名（不影响 `grpc.biliapi.net`） |
 | `chat.bilibili.com` stun/tracker REJECT | 拦截 WebRTC stun 追踪请求 |
+
 ## 测试
 
-测试按功能拆分为 `testcases/*.test.js`。`test_context.js` 提供轻量测试注册器、匿名化样本和 VM 运行环境，`run_bilibili_cleaner_tests.js` 自动发现测试套件并依次执行。VM 会注入模拟的 `$request`、`$response`、`$persistentStore`、`$httpClient` 等对象，对返回的响应和通知做断言，覆盖各接口的屏蔽、清理、缓存以及并发行为。`ipados.test.js` 另外覆盖旧版 View 字段、iPad 首页卡片类型、首页顶部分区平台隔离、`mine/ipad` 与大会员广告素材结构。
+测试按功能拆分为 `testcases/*.test.js`。`test_context.js` 提供轻量测试注册器、匿名化样本和 VM 运行环境，`run_bilibili_cleaner_tests.js` 自动发现测试套件并依次执行。VM 会注入模拟的 `$request`、`$response`、`$persistentStore`、`$httpClient` 等对象，对返回的响应和通知做断言，覆盖各接口的屏蔽、清理、缓存以及并发行为。`ipados.test.js` 另外覆盖旧版 View 字段、iPadOS 首页卡片类型、首页顶部分区平台隔离、`mine/ipad` 与大会员广告素材结构。
 
 运行：
 
 ```bash
-npm run check:build
 npm test
 ```
 
@@ -268,7 +268,7 @@ python3 -m http.server 8787 --bind 0.0.0.0
 局域网测试时使用 `bilibili` 项目根目录的 `bilibili_cleaner.lan.lpx`，该文件随仓库维护，保留本机 HTTP `script-path`，入口和参数必须与正式版保持同步。当前脚本地址示例（请把 `<局域网 IP>` 换成本机 IP）：
 
 ```text
-http://<局域网 IP>:8787/bilibili_cleaner.js?v=20260726-112
+http://<局域网 IP>:8787/bilibili_cleaner.js?v=<版本号>
 ```
 
 如果本机局域网 IP 或测试端口变了，只改 LAN 版 `script-path` 的主机或端口部分即可；其他配置仍然和正式版保持一致。修改脚本后，需要确认正式版和 LAN 版脚本地址的版本号都已更新。
@@ -279,18 +279,17 @@ http://<局域网 IP>:8787/bilibili_cleaner.js?v=20260726-112
 
 - `#!desc` 全文，包含 `注：` 之后的说明。
 - `[Argument]` 参数定义。
-- `[Script]` 入口、正则、参数列表、`enable`、`requires-body` 和 `binary-body-mode`。
+- `[Script]` 入口、正则、按处理器裁剪的参数列表、`enable`、`requires-body` 和 `binary-body-mode`。
 - `[MitM]` 域名列表。
 - 脚本地址版本号。
 
-`testcases/plugin-config.test.js` 会做静态同步检查，并由测试入口自动加载：只要正式版与 LAN 版在名称和 `script-path` 之外出现差异，测试就会失败。所以修改入口或参数时，必须两份一起改。
+`testcases/plugin-config.test.js` 会检查两份配置同步、各路由所需参数及参数顺序，并由测试入口自动加载。修改入口或参数时，必须同步更新两份配置和对应断言。
 
 ## 发布前的检查清单
 
 发布或者提交代码之前，按顺序确认以下事项：
 
-1. `npm run check:build`
-2. `npm test`
-3. `bilibili_cleaner.lpx` 和 `bilibili_cleaner.lan.lpx` 版本号一致。
-4. `[MitM]` 只保留了实际 rewrite 拦截的域名。
-5. 测试样本不包含真实标题、UP 主名称、账号标识或设备标识。
+1. `npm test`
+2. `bilibili_cleaner.lpx` 和 `bilibili_cleaner.lan.lpx` 版本号一致。
+3. `[MitM]` 只保留实际脚本拦截的域名。
+4. 测试样本不包含真实标题、UP 主名称、账号标识或设备标识。

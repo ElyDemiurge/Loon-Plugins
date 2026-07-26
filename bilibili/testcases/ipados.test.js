@@ -16,10 +16,6 @@ const {
   test,
 } = require("./test_context");
 
-/* -------------------------------------------------------------------------- */
-/* iPadOS-specific endpoints and captured schemas                             */
-/* -------------------------------------------------------------------------- */
-
 test("iPadOS 视频页：清理旧版 View 的广告、直播和独立广告字段", async () => {
   const result = await runPlugin({
     url: "https://grpc.biliapi.net/bilibili.app.view.v1.View/View",

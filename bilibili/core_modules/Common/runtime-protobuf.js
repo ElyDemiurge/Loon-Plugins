@@ -1,7 +1,4 @@
 // core_modules/Common: byte, gRPC, and protobuf runtime shared by iOS and iPadOS.
-/* -------------------------------------------------------------------------- */
-/* Byte, gRPC, and protobuf primitives                                        */
-/* -------------------------------------------------------------------------- */
 
 // Gunzip bytes with Loon utilities first and Node.js zlib as a test fallback.
 function gunzip(bytes) {
@@ -216,8 +213,7 @@ function notify(category, title, subtitle, message, attach) {
   }
 }
 
-// Route combined cleanup and blocking results according to the categories that actually matched.
-// Keep a combined notification only when both categories matched and are enabled.
+// Route results by category, combining them only when both categories matched and are enabled.
 function notifyCleanupAndFilter({
   cleaned,
   blocked,
@@ -287,20 +283,15 @@ function getResponseBodyText() {
   return decoder.decode(getResponseBodyBytes());
 }
 
-// Safely read request-body bytes and return undefined on failure.
-function getRequestBodyBytesSafely() {
+// Prefer request bodyBytes and fall back to body without interrupting the main flow.
+function getRequestBodySafely() {
   if (typeof $request === "undefined" || !$request) return undefined;
   try {
     if ($request.bodyBytes !== undefined) return $request.bodyBytes;
   } catch (error) {
     log("debug", "failed to read request bodyBytes", error);
   }
-  return undefined;
-}
 
-// Safely read the request body without interrupting the main flow.
-function getRequestBodySafely() {
-  if (typeof $request === "undefined" || !$request) return undefined;
   try {
     return $request.body;
   } catch (error) {

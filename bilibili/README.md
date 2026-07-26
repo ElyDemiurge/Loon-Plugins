@@ -1,6 +1,6 @@
 # 比狸比狸过滤
 
-适用于 [Loon](https://nsloon.app/) 的 Bilibili iOS / iPadOS 客户端过滤插件。通过在代理层改写 Bilibili App 的请求与响应，按关键词屏蔽视频与动态，并移除开屏、推荐流、搜索结果等位置的广告和推广内容。
+适用于 [Loon](https://nsloon.app/) 的 Bilibili iOS 与 iPadOS 客户端过滤插件。通过在代理层改写 Bilibili App 的请求与响应，按关键词屏蔽视频与动态，并移除开屏、推荐流、搜索结果等位置的广告和推广内容。
 
 - 插件名称：比狸比狸过滤
 - 适用平台：iOS、iPadOS（系统版本不低于 15）
@@ -54,7 +54,7 @@ python3 -m http.server 8787 --bind 0.0.0.0
 示例脚本地址（请将 `<局域网 IP>` 替换为本机 IP）：
 
 ```text
-http://<局域网 IP>:8787/bilibili_cleaner.js?v=20260726-112
+http://<局域网 IP>:8787/bilibili_cleaner.js?v=<版本号>
 ```
 
 ## 参数说明
@@ -106,9 +106,9 @@ http://<局域网 IP>:8787/bilibili_cleaner.js?v=20260726-112
 | `cleanFeedPromotedVideos` | 开启 | 移除首页推荐页带广告标记的推广视频卡片 |
 | `cleanVideoRelatedPromotedContent` | 开启 | 移除视频详情页推荐流中的商业推广内容 |
 | `cleanVideoRelatedAds` | 开启 | 移除视频详情页推荐流中的普通广告卡片 |
-| `cleanVideoBannerAds` | 开启 | 移除视频详情页中的横幅下载广告 |
+| `cleanVideoBannerAds` | 开启 | 仅作用于 iOS；移除视频详情页中的横幅下载广告 |
 | `cleanVideoRelatedLiveRecommendations` | 开启 | 移除视频详情页推荐流中的直播推荐卡片 |
-| `cleanVideoUpGoodsAds` | 开启 | 移除视频详情页下方的 UP 主推荐好物 |
+| `cleanVideoUpGoodsAds` | 开启 | 仅作用于 iOS；移除视频详情页下方的 UP 主推荐好物 |
 | `cleanSearchResultAds` | 开启 | 移除搜索结果中的广告卡片 |
 | `cleanSearchResultCreatorPromotions` | 开启 | 移除搜索结果中的创作推广卡片 |
 | `cleanSearchResultLiveRooms` | 开启 | 移除搜索结果中的直播间卡片 |
@@ -133,8 +133,8 @@ http://<局域网 IP>:8787/bilibili_cleaner.js?v=20260726-112
 | `cleanSearchDefaultWords` | 开启 | 移除首页搜索框内滚动的默认推荐词 |
 | `cleanHomeTopTabs` | 开启 | 仅精简 iOS 首页顶部分区，只保留直播、推荐和热门；iPadOS 不使用该过滤代码 |
 | `cleanBottomExtraButtons` | 开启 | 删除底部栏的加号与会员购按钮，保留首页、动态、我的等普通入口 |
-| `cleanMineCreationCenter` | 开启 | 删除 iOS / iPadOS 我的页面里的创作中心模块或入口组 |
-| `cleanMineServices` | 开启 | 删除 iOS / iPadOS 我的页面里的我的服务模块或入口组 |
+| `cleanMineCreationCenter` | 开启 | 删除 iOS 与 iPadOS 我的页面里的创作中心模块或入口组 |
+| `cleanMineServices` | 开启 | 删除 iOS 与 iPadOS 我的页面里的我的服务模块或入口组 |
 | `dynamicUpListDisplay` | show | 动态页「最常访问」UP 列表的显示方式。可选：仅存在直播时显示、始终显示、始终隐藏 |
 
 ### 调试与日志
@@ -150,12 +150,7 @@ http://<局域网 IP>:8787/bilibili_cleaner.js?v=20260726-112
 
 ## 工作机制
 
-- 屏蔽与移除逻辑均在 Loon 拦截到的响应中完成，不修改客户端本身。
-- 单一开关控制的脚本规则使用 Loon 的 `enable={开关}`：开关关闭时不捕获响应体，也不加载脚本。
-- 响应内容没有变化时通过 `$done({})` 原样放行；发生变化时只返回新的 `body`，由 Loon 保留其余响应字段。
-- 首页推荐页、首页搜索页、我的页面和 iPadOS 大会员素材等接口返回 JSON，由脚本解析后改写；首页热门、搜索结果、搜索候选词条、动态页与两端视频页接口返回 protobuf gRPC，由脚本内置的 protobuf 解析器处理后改写。
-- 未配置对应屏蔽规则时，高频首页接口会跳过过滤对象构建或 protobuf 解析；深度 Tag 批量请求完成后只合并写入一次缓存。
-- 涉及的请求与响应在 Loon 中通过 MitM 解密，改写域名为 `app.bilibili.com`、`grpc.biliapi.net`、`api.bilibili.com` 与 `api.live.bilibili.com`。
+插件只改写 Loon 拦截到的响应，不修改客户端。响应没有变化时原样放行；需要清理时只替换响应体。JSON 接口由对应页面处理器解析，gRPC 接口由内置 protobuf 工具按字段结构处理。
 
 更详细的实现说明参见 [TECH.md](./TECH.md)。
 
@@ -184,7 +179,6 @@ bilibili/
 
 ```bash
 npm run build
-npm run check:build
 npm test
 ```
 

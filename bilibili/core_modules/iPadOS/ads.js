@@ -1,9 +1,5 @@
 // core_modules/iPadOS: iPadOS-specific premium-membership advertisement materials.
 
-/* -------------------------------------------------------------------------- */
-/* iPadOS premium advertisement materials                                    */
-/* -------------------------------------------------------------------------- */
-
 // Clear premium advertisement material lists and the login overlay under the shared startup-promotion switch.
 function handleIpadVipAdsMaterialsResponse() {
   if (!arg.cleanStartupAds) {

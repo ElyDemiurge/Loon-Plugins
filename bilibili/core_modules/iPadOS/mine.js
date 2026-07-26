@@ -1,9 +1,5 @@
 // core_modules/iPadOS: iPadOS-specific grouped-array schema for the mine page.
 
-/* -------------------------------------------------------------------------- */
-/* iPadOS mine page                                                           */
-/* -------------------------------------------------------------------------- */
-
 // Clear one iPadOS entry group and record its original size.
 function cleanIpadMinePageGroup(data, key, title, target) {
   if (!Array.isArray(data?.[key])) return;

@@ -1,7 +1,4 @@
 // core_modules/Common: keyword and tag blocking rules shared by iOS and iPadOS.
-/* -------------------------------------------------------------------------- */
-/* Blocking rules and keywords                                                */
-/* -------------------------------------------------------------------------- */
 
 // Build title, creator, and tag rules while preserving display values for logs and notifications.
 function buildKeywords() {

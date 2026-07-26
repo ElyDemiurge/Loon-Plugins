@@ -1,9 +1,5 @@
 // core_modules/iOS: iOS-specific home-page top-tab filtering.
 
-/* -------------------------------------------------------------------------- */
-/* iOS home-page top tabs                                                     */
-/* -------------------------------------------------------------------------- */
-
 // Allowed iOS home-page top tabs: live, recommendations, and popular.
 const IOS_HOME_TOP_TAB_KEEP_IDS = new Set([39, 40, 41]);
 const IOS_HOME_TOP_TAB_KEEP_NAMES = new Set(["直播", "推荐", "热门"]);

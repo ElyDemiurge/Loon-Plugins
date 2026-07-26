@@ -1,7 +1,4 @@
 // core_modules/Common: splash, startup-resource, and JSON handlers shared by both platforms.
-/* -------------------------------------------------------------------------- */
-/* Splash, startup-resource, and personalization handlers                     */
-/* -------------------------------------------------------------------------- */
 
 // Array fields that must be cleared from splash-ad responses.
 const SPLASH_ARRAY_KEYS = [
@@ -125,16 +122,14 @@ function splashItemsMessage(items) {
   return lines.length ? `移除-开屏广告：\n${lines.join("\n")}` : "未命中开屏广告";
 }
 
-// Build the complete splash-ad notification payload.
-function splashNotifyPayload(summary, removedItems, cleaned) {
+// Build the splash-ad notification payload.
+function splashNotifyPayload(summary, removedItems) {
   const extra = [];
   if (summary.eventList) extra.push(`清理活动 ${summary.eventList}`);
   return {
     title: "Bilibili 开屏广告清理",
-    subtitle: cleaned
-      ? [`清理展示 ${summary.show} / 清理素材 ${summary.list}`, ...extra].join(" / ")
-      : "已关闭",
-    message: cleaned ? splashItemsMessage(removedItems) : "开屏广告清理开关已关闭",
+    subtitle: [`清理展示 ${summary.show} / 清理素材 ${summary.list}`, ...extra].join(" / "),
+    message: splashItemsMessage(removedItems),
   };
 }
 
@@ -209,7 +204,7 @@ function handleSplashResponse() {
     const summary = splashResponseSummary(data);
     const removedItems = data ? splashRemovedItems(data) : [];
     setResponseBodyText("OK");
-    const notifyPayload = splashNotifyPayload(summary, removedItems, true);
+    const notifyPayload = splashNotifyPayload(summary, removedItems);
     log("info", { page: "splash", endpoint: "list", cleaned: true, summary, removedItems });
     notify("remove", notifyPayload.title, notifyPayload.subtitle, notifyPayload.message);
     return finishResponse();
@@ -226,8 +221,7 @@ function handleSplashResponse() {
   const removedItems = splashRemovedItems(data);
 
   if (SPLASH_SHOW_EVENT_PATTERN.test(url)) {
-    // For /splash/show and /splash/event/list2, clear only show or event_list.
-    // Preserve session fields so missing data does not trigger a local-cache fallback.
+    // Preserve session fields to avoid a local-cache fallback on show and event/list2.
     if (Array.isArray(data.show)) data.show = [];
     if (Array.isArray(data.event_list)) data.event_list = [];
     setResponseBodyText(JSON.stringify(json));
@@ -235,7 +229,7 @@ function handleSplashResponse() {
     clearSplashData(data);
     setResponseBodyText(JSON.stringify(json));
   }
-  const notifyPayload = splashNotifyPayload(summary, removedItems, true);
+  const notifyPayload = splashNotifyPayload(summary, removedItems);
   log("info", {
     page: "splash",
     cleaned: true,

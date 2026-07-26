@@ -1,7 +1,4 @@
 // core_modules/Common: protobuf message-tree utilities shared by iOS and iPadOS.
-/* -------------------------------------------------------------------------- */
-/* Request parameters and protobuf structure extraction                       */
-/* -------------------------------------------------------------------------- */
 
 // Read the first varint value for a field number.
 function varintField(fields, no) {
@@ -12,8 +9,7 @@ function varintField(fields, no) {
 // Extract the video aid from a View gRPC request body.
 function extractViewAidFromRequest() {
   try {
-    const bodyBytes = getRequestBodyBytesSafely();
-    const requestBody = bodyBytes !== undefined ? bodyBytes : getRequestBodySafely();
+    const requestBody = getRequestBodySafely();
     if (requestBody === undefined) return "";
     const message = decodeGrpcBody(toBytes(requestBody));
     return String(varintField(parseFields(message), 1) || "");

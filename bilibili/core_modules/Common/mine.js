@@ -1,9 +1,5 @@
 // core_modules/Common: mine-page statistics and notifications shared by iOS and iPadOS.
 
-/* -------------------------------------------------------------------------- */
-/* Shared mine-page capabilities                                              */
-/* -------------------------------------------------------------------------- */
-
 // Create mine-page statistics while platform handlers identify their own schemas.
 function minePageSummary() {
   return {

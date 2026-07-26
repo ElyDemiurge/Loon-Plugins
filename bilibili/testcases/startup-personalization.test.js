@@ -11,10 +11,6 @@ const {
   test,
 } = require("./test_context");
 
-/* -------------------------------------------------------------------------- */
-/* Startup promotions                                                         */
-/* -------------------------------------------------------------------------- */
-
 test("软件启动时推广资源：移除启动活动 Tab 并保留普通 Tab", async () => {
   const result = await runPlugin({
     url: "https://app.bilibili.com/x/resource/show/tab/v2?test=1",

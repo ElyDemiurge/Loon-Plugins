@@ -7,10 +7,6 @@ const {
   test,
 } = require("./test_context");
 
-/* -------------------------------------------------------------------------- */
-/* Home feed                                                                  */
-/* -------------------------------------------------------------------------- */
-
 test("首页推荐页：开启两个清理开关时，推广视频单独计入清理-首页推荐页推广视频", async () => {
   const result = await runPlugin();
   const items = feedItems(result.response.body);

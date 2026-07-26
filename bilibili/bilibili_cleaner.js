@@ -11,10 +11,6 @@
  * root-level bilibili_cleaner.js directly.
  */
 
-/* -------------------------------------------------------------------------- */
-/* Configuration, arguments, and logging                                      */
-/* -------------------------------------------------------------------------- */
-
 // Default values for every plugin argument not explicitly supplied by Loon.
 const DEFAULTS = {
   titleKeywords: "",
@@ -64,8 +60,7 @@ const LogLevel = { debug: 1, info: 2, warn: 3, error: 4, off: 5 };
 // Persistent-store key used by the video tag cache.
 const TAG_CACHE_KEY = "BilibiliFilter.tagCache.v1";
 
-// Capacity and network limits for tag caching and remote tag lookups.
-// Keep at most 500 entries for seven days, with 24 concurrent requests and a 1.5-second timeout.
+// Keep at most 500 tag entries for seven days; allow 24 concurrent 1.5-second requests.
 const TAG_CACHE_LIMIT = 500;
 const TAG_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 const TAG_FETCH_TIMEOUT_MS = 1500;
@@ -295,9 +290,6 @@ function buildRegexRules(patterns) {
     .filter(Boolean);
 }
 // core_modules/Common: byte, gRPC, and protobuf runtime shared by iOS and iPadOS.
-/* -------------------------------------------------------------------------- */
-/* Byte, gRPC, and protobuf primitives                                        */
-/* -------------------------------------------------------------------------- */
 
 // Gunzip bytes with Loon utilities first and Node.js zlib as a test fallback.
 function gunzip(bytes) {
@@ -512,8 +504,7 @@ function notify(category, title, subtitle, message, attach) {
   }
 }
 
-// Route combined cleanup and blocking results according to the categories that actually matched.
-// Keep a combined notification only when both categories matched and are enabled.
+// Route results by category, combining them only when both categories matched and are enabled.
 function notifyCleanupAndFilter({
   cleaned,
   blocked,
@@ -583,20 +574,15 @@ function getResponseBodyText() {
   return decoder.decode(getResponseBodyBytes());
 }
 
-// Safely read request-body bytes and return undefined on failure.
-function getRequestBodyBytesSafely() {
+// Prefer request bodyBytes and fall back to body without interrupting the main flow.
+function getRequestBodySafely() {
   if (typeof $request === "undefined" || !$request) return undefined;
   try {
     if ($request.bodyBytes !== undefined) return $request.bodyBytes;
   } catch (error) {
     log("debug", "failed to read request bodyBytes", error);
   }
-  return undefined;
-}
 
-// Safely read the request body without interrupting the main flow.
-function getRequestBodySafely() {
-  if (typeof $request === "undefined" || !$request) return undefined;
   try {
     return $request.body;
   } catch (error) {
@@ -664,9 +650,6 @@ function getRequestUrl() {
   return (typeof $request !== "undefined" && $request && $request.url) || "";
 }
 // core_modules/Common: keyword and tag blocking rules shared by iOS and iPadOS.
-/* -------------------------------------------------------------------------- */
-/* Blocking rules and keywords                                                */
-/* -------------------------------------------------------------------------- */
 
 // Build title, creator, and tag rules while preserving display values for logs and notifications.
 function buildKeywords() {
@@ -904,9 +887,6 @@ function uniqueStrings(values) {
   return result;
 }
 // core_modules/Common: persistent video-tag cache shared by iOS and iPadOS.
-/* -------------------------------------------------------------------------- */
-/* Persistent storage and tag caching                                         */
-/* -------------------------------------------------------------------------- */
 
 // Read a persistent value and return null when storage is unavailable.
 function readStore(key) {
@@ -956,10 +936,7 @@ function mergeDisplayKeywords(...groups) {
   }
   return result;
 }
-
-
-// URL pattern for the /splash/list creative-cache refresh endpoint.
-// Returning plain "OK" prevents the client from retaining stale splash creatives.
+// Returning plain "OK" for /splash/list prevents stale splash creatives from being retained.
 const SPLASH_LIST_URL_PATTERN = /\/x\/v2\/splash\/list\?/;
 // For /splash/show and /splash/event/list2, clear only the target list and preserve session fields.
 const SPLASH_SHOW_EVENT_PATTERN = /\/x\/v2\/splash\/(?:show|event\/list2)\?/;
@@ -1026,7 +1003,7 @@ function getCachedTags(aid) {
 }
 
 // Save tags for an aid and return created, updated, unchanged, or skipped status.
-function saveCachedTags(aid, tags, title, options = {}) {
+function saveCachedTags(aid, tags, options = {}) {
   if (!aid || !tags.length) return { status: "skipped", tags: [] };
   const cache = readTagCache();
   const key = String(aid);
@@ -1041,7 +1018,6 @@ function saveCachedTags(aid, tags, title, options = {}) {
   cache.items = cache.items || {};
   cache.items[key] = {
     tags: nextTags,
-    title: title || cache.items[key]?.title || "",
     updatedAt: now,
   };
   tagCacheDirty = true;
@@ -1067,7 +1043,7 @@ async function ensureTagsForAid(aid, options = {}) {
   if (!pendingTagRequests[aid]) {
     pendingTagRequests[aid] = fetchArchiveTags(aid)
       .then((tags) => {
-        if (tags.length) saveCachedTags(aid, tags, "", { deferCacheWrite: true });
+        if (tags.length) saveCachedTags(aid, tags, { deferCacheWrite: true });
         return tags;
       })
       .catch((error) => {
@@ -1128,9 +1104,6 @@ function httpGetText(url) {
   });
 }
 // core_modules/Common: protobuf message-tree utilities shared by iOS and iPadOS.
-/* -------------------------------------------------------------------------- */
-/* Request parameters and protobuf structure extraction                       */
-/* -------------------------------------------------------------------------- */
 
 // Read the first varint value for a field number.
 function varintField(fields, no) {
@@ -1141,8 +1114,7 @@ function varintField(fields, no) {
 // Extract the video aid from a View gRPC request body.
 function extractViewAidFromRequest() {
   try {
-    const bodyBytes = getRequestBodyBytesSafely();
-    const requestBody = bodyBytes !== undefined ? bodyBytes : getRequestBodySafely();
+    const requestBody = getRequestBodySafely();
     if (requestBody === undefined) return "";
     const message = decodeGrpcBody(toBytes(requestBody));
     return String(varintField(parseFields(message), 1) || "");
@@ -1280,9 +1252,6 @@ function transformProtobufFields(bytes, visitor, options = {}) {
   return transform(bytes, 0, []);
 }
 // core_modules/Common: shared video, related-feed, and search-result foundations.
-/* -------------------------------------------------------------------------- */
-/* Video pages, related feeds, and search results                             */
-/* -------------------------------------------------------------------------- */
 
 // Create video-page statistics grouped by cleanup type.
 function videoCleanupSummary() {
@@ -1347,8 +1316,7 @@ function extractReadableStrings(bytes) {
   ));
 }
 
-// Classify a video-page recommendation only when its cleanup switch is enabled.
-// Supported categories include banners, live cards, creator goods, promotions, and advertisements.
+// Classify enabled cleanup targets: banners, live cards, creator goods, promotions, and ads.
 function videoRelatedCleanupType(bytes, scope) {
   const text = decodeString(bytes);
 
@@ -1432,6 +1400,57 @@ function videoViewNotifyPayload(summary, cacheResult = null, aid = "") {
     cleaned,
     blocked,
   };
+}
+
+// Finalize a platform video-detail response and optionally update its tag cache.
+function finishVideoViewResponse({
+  platform,
+  endpoint = "",
+  message,
+  summary,
+  extractResponseAid,
+  kept,
+}) {
+  let aid = "";
+  let tags = [];
+  let cacheResult = null;
+  let combinedPayload = videoViewNotifyPayload(summary);
+
+  if (combinedPayload.cleaned || combinedPayload.blocked) {
+    setResponseBodyBytes(encodeGrpcBody(message));
+  }
+
+  if (arg.deepFilter) {
+    tags = collectTopicTags(message);
+    aid = extractViewAidFromRequest() || extractResponseAid(message);
+    cacheResult = saveCachedTags(aid, tags);
+    combinedPayload = videoViewNotifyPayload(summary, cacheResult, aid);
+  }
+
+  const logPayload = {
+    platform,
+    page: "view",
+  };
+  if (endpoint) logPayload.endpoint = endpoint;
+  if (kept !== undefined) logPayload.kept = kept;
+  if (cacheResult) {
+    logPayload.aid = aid;
+    logPayload.tags = tags;
+    logPayload.cacheStatus = cacheResult.status;
+  }
+  logPayload.cleaned = combinedPayload.cleaned;
+  logPayload.blocked = combinedPayload.blocked;
+  logPayload.summary = summary;
+  log("info", logPayload);
+
+  notifyCleanupAndFilter({
+    cleaned: combinedPayload.cleaned,
+    blocked: combinedPayload.blocked,
+    combined: combinedPayload,
+    cleanup: videoViewNotifyPayload(videoNotificationSummary(summary, "remove"), cacheResult, aid),
+    filter: videoViewNotifyPayload(videoNotificationSummary(summary, "filter"), cacheResult, aid),
+  });
+  finishResponse();
 }
 
 // Append a blocked related-video item to the summary.
@@ -1783,8 +1802,9 @@ function searchResultUpNames(bytes) {
     "23.14.2",
     "23.32",
   ];
-  return uniqueStrings(searchResultReadableEntries(bytes)
-    .filter((entry, _index, entries) =>
+  const entries = searchResultReadableEntries(bytes);
+  return uniqueStrings(entries
+    .filter((entry) =>
       upPaths.some((suffix) => pathEndsWith(entry.path, suffix)) ||
       (
         pathEndsWith(entry.path, "42.5.2") &&
@@ -2164,10 +2184,6 @@ async function handleSearchAllResponse() {
 }
 // core_modules/iOS: iOS-specific ViewUnite detail and related-feed protobuf schema.
 
-/* -------------------------------------------------------------------------- */
-/* iOS ViewUnite video page                                                   */
-/* -------------------------------------------------------------------------- */
-
 // Extract the current video aid from an iOS ViewUnite response.
 function extractIosViewAidFromMessage(message) {
   try {
@@ -2380,56 +2396,14 @@ async function handleIosViewResponse() {
   const summary = videoCleanupSummary();
   let nextMessage = sanitizeIosVideoPageMessage(message, summary, { bannerFieldNo: 7 });
   nextMessage = await filterIosVideoRelatedMatches(nextMessage, summary, keywords);
-  const notifyPayload = videoViewNotifyPayload(summary);
-  if (notifyPayload.cleaned || notifyPayload.blocked) {
-    setResponseBodyBytes(encodeGrpcBody(nextMessage));
-  }
-
-  if (arg.deepFilter) {
-    const tags = collectTopicTags(nextMessage);
-    const aid = extractViewAidFromRequest() || extractIosViewAidFromMessage(nextMessage);
-    const cacheResult = saveCachedTags(aid, tags, "");
-    const cacheNotifyPayload = videoViewNotifyPayload(summary, cacheResult, aid);
-    log("info", {
-      platform: "iOS",
-      page: "view",
-      aid,
-      tags,
-      cacheStatus: cacheResult.status,
-      cleaned: cacheNotifyPayload.cleaned,
-      blocked: cacheNotifyPayload.blocked,
-      summary,
-    });
-    notifyCleanupAndFilter({
-      cleaned: cacheNotifyPayload.cleaned,
-      blocked: cacheNotifyPayload.blocked,
-      combined: cacheNotifyPayload,
-      cleanup: videoViewNotifyPayload(videoNotificationSummary(summary, "remove"), cacheResult, aid),
-      filter: videoViewNotifyPayload(videoNotificationSummary(summary, "filter"), cacheResult, aid),
-    });
-  } else {
-    log("info", {
-      platform: "iOS",
-      page: "view",
-      cleaned: notifyPayload.cleaned,
-      blocked: notifyPayload.blocked,
-      summary,
-    });
-    notifyCleanupAndFilter({
-      cleaned: notifyPayload.cleaned,
-      blocked: notifyPayload.blocked,
-      combined: notifyPayload,
-      cleanup: videoViewNotifyPayload(videoNotificationSummary(summary, "remove")),
-      filter: videoViewNotifyPayload(videoNotificationSummary(summary, "filter")),
-    });
-  }
-  finishResponse();
+  finishVideoViewResponse({
+    platform: "iOS",
+    message: nextMessage,
+    summary,
+    extractResponseAid: extractIosViewAidFromMessage,
+  });
 }
 // core_modules/iPadOS: iPadOS-specific legacy View detail-page protobuf schema.
-
-/* -------------------------------------------------------------------------- */
-/* iPadOS legacy View video page                                              */
-/* -------------------------------------------------------------------------- */
 
 // Extract the current video aid from top-level field 1 of a legacy iPadOS View response.
 function extractIpadViewAidFromMessage(message) {
@@ -2516,59 +2490,16 @@ async function handleIpadViewResponse() {
   }
 
   const nextMessage = concat(chunks);
-  const notifyPayload = videoViewNotifyPayload(summary);
-  if (notifyPayload.cleaned || notifyPayload.blocked) {
-    setResponseBodyBytes(encodeGrpcBody(nextMessage));
-  }
-
-  if (arg.deepFilter) {
-    const tags = collectTopicTags(nextMessage);
-    const aid = extractViewAidFromRequest() || extractIpadViewAidFromMessage(nextMessage);
-    const cacheResult = saveCachedTags(aid, tags, "");
-    const cacheNotifyPayload = videoViewNotifyPayload(summary, cacheResult, aid);
-    log("info", {
-      platform: "iPadOS",
-      page: "view",
-      endpoint: "legacyView",
-      kept,
-      aid,
-      tags,
-      cacheStatus: cacheResult.status,
-      cleaned: cacheNotifyPayload.cleaned,
-      blocked: cacheNotifyPayload.blocked,
-      summary,
-    });
-    notifyCleanupAndFilter({
-      cleaned: cacheNotifyPayload.cleaned,
-      blocked: cacheNotifyPayload.blocked,
-      combined: cacheNotifyPayload,
-      cleanup: videoViewNotifyPayload(videoNotificationSummary(summary, "remove"), cacheResult, aid),
-      filter: videoViewNotifyPayload(videoNotificationSummary(summary, "filter"), cacheResult, aid),
-    });
-  } else {
-    log("info", {
-      platform: "iPadOS",
-      page: "view",
-      endpoint: "legacyView",
-      kept,
-      cleaned: notifyPayload.cleaned,
-      blocked: notifyPayload.blocked,
-      summary,
-    });
-    notifyCleanupAndFilter({
-      cleaned: notifyPayload.cleaned,
-      blocked: notifyPayload.blocked,
-      combined: notifyPayload,
-      cleanup: videoViewNotifyPayload(videoNotificationSummary(summary, "remove")),
-      filter: videoViewNotifyPayload(videoNotificationSummary(summary, "filter")),
-    });
-  }
-  finishResponse();
+  finishVideoViewResponse({
+    platform: "iPadOS",
+    endpoint: "legacyView",
+    message: nextMessage,
+    summary,
+    extractResponseAid: extractIpadViewAidFromMessage,
+    kept,
+  });
 }
 // core_modules/Common: reply-section cleanup shared by iOS and iPadOS.
-/* -------------------------------------------------------------------------- */
-/* Reply-section cleanup                                                      */
-/* -------------------------------------------------------------------------- */
 
 // Markers for pinned advertisement replies, including commercial links and ad payloads.
 const REPLY_AD_MARKER_PATTERN = /ad_cb|cm\.bilibili\.com\/ldad|googleapis\.com\/bilibili\.ad\.v1|SourceContentDto|schema_name":"ad|"ad_info"|reply_control"[^"]*ad/;
@@ -2633,9 +2564,6 @@ function handleReplyMainListResponse() {
   finishResponse();
 }
 // core_modules/Common: splash, startup-resource, and JSON handlers shared by both platforms.
-/* -------------------------------------------------------------------------- */
-/* Splash, startup-resource, and personalization handlers                     */
-/* -------------------------------------------------------------------------- */
 
 // Array fields that must be cleared from splash-ad responses.
 const SPLASH_ARRAY_KEYS = [
@@ -2759,16 +2687,14 @@ function splashItemsMessage(items) {
   return lines.length ? `移除-开屏广告：\n${lines.join("\n")}` : "未命中开屏广告";
 }
 
-// Build the complete splash-ad notification payload.
-function splashNotifyPayload(summary, removedItems, cleaned) {
+// Build the splash-ad notification payload.
+function splashNotifyPayload(summary, removedItems) {
   const extra = [];
   if (summary.eventList) extra.push(`清理活动 ${summary.eventList}`);
   return {
     title: "Bilibili 开屏广告清理",
-    subtitle: cleaned
-      ? [`清理展示 ${summary.show} / 清理素材 ${summary.list}`, ...extra].join(" / ")
-      : "已关闭",
-    message: cleaned ? splashItemsMessage(removedItems) : "开屏广告清理开关已关闭",
+    subtitle: [`清理展示 ${summary.show} / 清理素材 ${summary.list}`, ...extra].join(" / "),
+    message: splashItemsMessage(removedItems),
   };
 }
 
@@ -2843,7 +2769,7 @@ function handleSplashResponse() {
     const summary = splashResponseSummary(data);
     const removedItems = data ? splashRemovedItems(data) : [];
     setResponseBodyText("OK");
-    const notifyPayload = splashNotifyPayload(summary, removedItems, true);
+    const notifyPayload = splashNotifyPayload(summary, removedItems);
     log("info", { page: "splash", endpoint: "list", cleaned: true, summary, removedItems });
     notify("remove", notifyPayload.title, notifyPayload.subtitle, notifyPayload.message);
     return finishResponse();
@@ -2860,8 +2786,7 @@ function handleSplashResponse() {
   const removedItems = splashRemovedItems(data);
 
   if (SPLASH_SHOW_EVENT_PATTERN.test(url)) {
-    // For /splash/show and /splash/event/list2, clear only show or event_list.
-    // Preserve session fields so missing data does not trigger a local-cache fallback.
+    // Preserve session fields to avoid a local-cache fallback on show and event/list2.
     if (Array.isArray(data.show)) data.show = [];
     if (Array.isArray(data.event_list)) data.event_list = [];
     setResponseBodyText(JSON.stringify(json));
@@ -2869,7 +2794,7 @@ function handleSplashResponse() {
     clearSplashData(data);
     setResponseBodyText(JSON.stringify(json));
   }
-  const notifyPayload = splashNotifyPayload(summary, removedItems, true);
+  const notifyPayload = splashNotifyPayload(summary, removedItems);
   log("info", {
     page: "splash",
     cleaned: true,
@@ -3207,10 +3132,6 @@ function searchSquareNotifyPayload(nextModules, removedModules) {
 }
 // core_modules/iOS: iOS-specific home-page top-tab filtering.
 
-/* -------------------------------------------------------------------------- */
-/* iOS home-page top tabs                                                     */
-/* -------------------------------------------------------------------------- */
-
 // Allowed iOS home-page top tabs: live, recommendations, and popular.
 const IOS_HOME_TOP_TAB_KEEP_IDS = new Set([39, 40, 41]);
 const IOS_HOME_TOP_TAB_KEEP_NAMES = new Set(["直播", "推荐", "热门"]);
@@ -3246,10 +3167,6 @@ function cleanIosHomeTopTabsData(data, summary) {
   data.tab = kept;
 }
 // core_modules/Common: mine-page statistics and notifications shared by iOS and iPadOS.
-
-/* -------------------------------------------------------------------------- */
-/* Shared mine-page capabilities                                              */
-/* -------------------------------------------------------------------------- */
 
 // Create mine-page statistics while platform handlers identify their own schemas.
 function minePageSummary() {
@@ -3312,10 +3229,6 @@ function finishMinePageResponse(json, summary, platform) {
   finishResponse();
 }
 // core_modules/iOS: iOS-specific mine-page sections_v2 and sections schema.
-
-/* -------------------------------------------------------------------------- */
-/* iOS mine page                                                              */
-/* -------------------------------------------------------------------------- */
 
 const IOS_MINE_PAGE_SECTION_ARRAY_KEYS = ["sections_v2", "sections"];
 const IOS_MINE_CREATION_CENTER_TITLE = "创作中心";
@@ -3406,10 +3319,6 @@ function handleIosMinePageResponse() {
 }
 // core_modules/iPadOS: iPadOS-specific grouped-array schema for the mine page.
 
-/* -------------------------------------------------------------------------- */
-/* iPadOS mine page                                                           */
-/* -------------------------------------------------------------------------- */
-
 // Clear one iPadOS entry group and record its original size.
 function cleanIpadMinePageGroup(data, key, title, target) {
   if (!Array.isArray(data?.[key])) return;
@@ -3448,10 +3357,6 @@ function handleIpadMinePageResponse() {
   finishMinePageResponse(json, summary, "iPadOS");
 }
 // core_modules/iPadOS: iPadOS-specific premium-membership advertisement materials.
-
-/* -------------------------------------------------------------------------- */
-/* iPadOS premium advertisement materials                                    */
-/* -------------------------------------------------------------------------- */
 
 // Clear premium advertisement material lists and the login overlay under the shared startup-promotion switch.
 function handleIpadVipAdsMaterialsResponse() {
@@ -3512,10 +3417,6 @@ function handleIpadVipAdsMaterialsResponse() {
  * core_modules/Common: live, tracking, search-page, and mode handlers shared by both platforms.
  * Covers live pages, tracking parameters, home search, teenager mode, and interactive danmaku.
  */
-
-/* -------------------------------------------------------------------------- */
-/* Live-room advertisement cleanup                                            */
-/* -------------------------------------------------------------------------- */
 
 // Common field names that contain live-feed cards.
 const LIVE_FEED_ARRAY_KEYS = ["card_list", "list", "items", "rooms"];
@@ -3611,10 +3512,6 @@ function handleLiveAdsResponse() {
   finishResponse();
 }
 
-/* -------------------------------------------------------------------------- */
-/* Tracking parameters controlled by JavaScript switches                      */
-/* -------------------------------------------------------------------------- */
-
 // Disabled STUN and tracking endpoint used to rewrite pd-proxy/tracker data.
 const PD_PROXY_DEAD_STUN = "stun.chat.bilibili.com:3478";
 
@@ -3691,12 +3588,12 @@ function handleSearchSquareResponse() {
   finishResponse();
 }
 
-// Build the complete default-search-word notification payload.
-function searchDefaultWordsNotifyPayload(words, cleaned) {
+// Build the default-search-word notification payload.
+function searchDefaultWordsNotifyPayload(words) {
   return {
     title: "Bilibili 搜索框推荐词移除",
-    subtitle: cleaned ? `移除 ${words.length ? 1 : 0}` : "已关闭",
-    message: cleaned ? "移除-首页搜索框里滚动的推荐词" : "搜索框推荐词移除开关已关闭",
+    subtitle: `移除 ${words.length ? 1 : 0}`,
+    message: "移除-首页搜索框里滚动的推荐词",
   };
 }
 
@@ -3716,7 +3613,7 @@ function handleSearchDefaultWordsResponse() {
 
   setResponseBodyBytes(encodeGrpcBody(new Uint8Array()));
 
-  const notifyPayload = searchDefaultWordsNotifyPayload(words, true);
+  const notifyPayload = searchDefaultWordsNotifyPayload(words);
   log("info", {
     page: "searchDefaultWords",
     cleaned: true,
@@ -3757,9 +3654,6 @@ function handleInteractiveDanmakuResponse() {
   finishResponse();
 }
 // core_modules/Common: dynamic-page filtering and personalization shared by iOS and iPadOS.
-/* -------------------------------------------------------------------------- */
-/* Dynamic-page filtering and personalization                                 */
-/* -------------------------------------------------------------------------- */
 
 // Compact display text by removing zero-width characters and links, then truncate when needed.
 function compactDisplayText(value, maxLength = 48) {
@@ -4014,8 +3908,7 @@ function isDynamicUpListSection(bytes) {
   return names.length >= 3;
 }
 
-// Apply dynamicUpListMode to frequent-creator sections.
-// Hide removes the section, auto removes it only without live markers, and show preserves it.
+// Hide frequent creators, or in auto mode preserve them only when live markers exist.
 function sanitizeDynamicUpList(message, mode, summary) {
   summary.upListMode = mode;
   if (mode === "show") return message;
@@ -4124,9 +4017,6 @@ function handleDynamicAllResponse() {
   finishResponse();
 }
 // core_modules/Common: home-feed and popular-page handling shared by iOS and iPadOS.
-/* -------------------------------------------------------------------------- */
-/* Home feed and popular page                                                 */
-/* -------------------------------------------------------------------------- */
 
 // Extract titles and creator names from a home-feed item.
 function extractHomeFeedItemText(item) {
@@ -4197,12 +4087,11 @@ async function filterHomeFeedIndex() {
   let cleanedAds = 0;
   let cleanedPromotedVideos = 0;
 
-  // These collections are used only for notifications and logs.
+  // Keep cleanup summaries separate from videos that still require blocking evaluation.
   const removedItems = [];
   const cleanedAdItems = [];
   const cleanedPromotedVideoItems = [];
 
-  // Rows contains regular videos that still need blocking-rule evaluation.
   const rows = [];
   const nextItems = [];
   for (const item of items) {
@@ -4361,9 +4250,6 @@ async function handleHomePopularIndex() {
   finishResponse();
 }
 // core_modules/Common: shared router dispatching to Common, iOS, and iPadOS handlers.
-/* -------------------------------------------------------------------------- */
-/* Route entry point                                                          */
-/* -------------------------------------------------------------------------- */
 
 // Dispatch a response by request URL and preserve unmatched responses unchanged.
 async function main() {

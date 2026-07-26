@@ -3,10 +3,6 @@
  * Covers live pages, tracking parameters, home search, teenager mode, and interactive danmaku.
  */
 
-/* -------------------------------------------------------------------------- */
-/* Live-room advertisement cleanup                                            */
-/* -------------------------------------------------------------------------- */
-
 // Common field names that contain live-feed cards.
 const LIVE_FEED_ARRAY_KEYS = ["card_list", "list", "items", "rooms"];
 // Advertisement markers used by live cards.
@@ -101,10 +97,6 @@ function handleLiveAdsResponse() {
   finishResponse();
 }
 
-/* -------------------------------------------------------------------------- */
-/* Tracking parameters controlled by JavaScript switches                      */
-/* -------------------------------------------------------------------------- */
-
 // Disabled STUN and tracking endpoint used to rewrite pd-proxy/tracker data.
 const PD_PROXY_DEAD_STUN = "stun.chat.bilibili.com:3478";
 
@@ -181,12 +173,12 @@ function handleSearchSquareResponse() {
   finishResponse();
 }
 
-// Build the complete default-search-word notification payload.
-function searchDefaultWordsNotifyPayload(words, cleaned) {
+// Build the default-search-word notification payload.
+function searchDefaultWordsNotifyPayload(words) {
   return {
     title: "Bilibili 搜索框推荐词移除",
-    subtitle: cleaned ? `移除 ${words.length ? 1 : 0}` : "已关闭",
-    message: cleaned ? "移除-首页搜索框里滚动的推荐词" : "搜索框推荐词移除开关已关闭",
+    subtitle: `移除 ${words.length ? 1 : 0}`,
+    message: "移除-首页搜索框里滚动的推荐词",
   };
 }
 
@@ -206,7 +198,7 @@ function handleSearchDefaultWordsResponse() {
 
   setResponseBodyBytes(encodeGrpcBody(new Uint8Array()));
 
-  const notifyPayload = searchDefaultWordsNotifyPayload(words, true);
+  const notifyPayload = searchDefaultWordsNotifyPayload(words);
   log("info", {
     page: "searchDefaultWords",
     cleaned: true,

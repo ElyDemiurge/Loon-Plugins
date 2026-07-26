@@ -14,10 +14,6 @@ const {
   test,
 } = require("./test_context");
 
-/* -------------------------------------------------------------------------- */
-/* Splash advertisements                                                      */
-/* -------------------------------------------------------------------------- */
-
 test("开屏广告：show 入口会清空展示列表", async () => {
   const result = await runPlugin({
     url: "https://app.bilibili.com/x/v2/splash/show?test=1",

@@ -7,10 +7,6 @@
  * root-level bilibili_cleaner.js directly.
  */
 
-/* -------------------------------------------------------------------------- */
-/* Configuration, arguments, and logging                                      */
-/* -------------------------------------------------------------------------- */
-
 // Default values for every plugin argument not explicitly supplied by Loon.
 const DEFAULTS = {
   titleKeywords: "",
@@ -60,8 +56,7 @@ const LogLevel = { debug: 1, info: 2, warn: 3, error: 4, off: 5 };
 // Persistent-store key used by the video tag cache.
 const TAG_CACHE_KEY = "BilibiliFilter.tagCache.v1";
 
-// Capacity and network limits for tag caching and remote tag lookups.
-// Keep at most 500 entries for seven days, with 24 concurrent requests and a 1.5-second timeout.
+// Keep at most 500 tag entries for seven days; allow 24 concurrent 1.5-second requests.
 const TAG_CACHE_LIMIT = 500;
 const TAG_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 const TAG_FETCH_TIMEOUT_MS = 1500;

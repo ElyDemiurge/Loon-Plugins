@@ -15,10 +15,6 @@ const TAG_CACHE_KEY = "BilibiliFilter.tagCache.v1";
 // Primary script source under test.
 const source = fs.readFileSync(SCRIPT_PATH, "utf8");
 
-/* -------------------------------------------------------------------------- */
-/* Test fixtures and helpers                                                  */
-/* -------------------------------------------------------------------------- */
-
 function parseFeedBody(body) {
   return JSON.parse(body);
 }
@@ -374,10 +370,6 @@ function encodeGrpc(payload) {
   header.writeUInt32BE(payload.length, 1);
   return Buffer.concat([header, payload]);
 }
-
-/* -------------------------------------------------------------------------- */
-/* Protobuf and gRPC fixture generation                                       */
-/* -------------------------------------------------------------------------- */
 
 function homePopularCard({ title, up, aid }) {
   const base = Buffer.concat([
@@ -1363,7 +1355,6 @@ function normalizeLpxForSync(text) {
       "script-path=SCRIPT_PATH?v=VERSION"
     );
 }
-
 
 module.exports = {
   assert,

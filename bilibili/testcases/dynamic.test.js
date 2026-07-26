@@ -9,10 +9,6 @@ const {
   test,
 } = require("./test_context");
 
-/* -------------------------------------------------------------------------- */
-/* Dynamic page                                                               */
-/* -------------------------------------------------------------------------- */
-
 test("动态页：移除 UP 主推荐商品模块但保留动态本身", async () => {
   const result = await runPlugin({
     url: "https://grpc.biliapi.net/bilibili.app.dynamic.v2.Dynamic/DynAll",

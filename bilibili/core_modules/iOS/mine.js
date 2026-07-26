@@ -1,9 +1,5 @@
 // core_modules/iOS: iOS-specific mine-page sections_v2 and sections schema.
 
-/* -------------------------------------------------------------------------- */
-/* iOS mine page                                                              */
-/* -------------------------------------------------------------------------- */
-
 const IOS_MINE_PAGE_SECTION_ARRAY_KEYS = ["sections_v2", "sections"];
 const IOS_MINE_CREATION_CENTER_TITLE = "创作中心";
 const IOS_MINE_SERVICES_TITLE = "我的服务";

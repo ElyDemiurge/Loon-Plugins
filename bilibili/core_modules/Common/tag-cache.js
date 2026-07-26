@@ -1,7 +1,4 @@
 // core_modules/Common: persistent video-tag cache shared by iOS and iPadOS.
-/* -------------------------------------------------------------------------- */
-/* Persistent storage and tag caching                                         */
-/* -------------------------------------------------------------------------- */
 
 // Read a persistent value and return null when storage is unavailable.
 function readStore(key) {
@@ -51,10 +48,7 @@ function mergeDisplayKeywords(...groups) {
   }
   return result;
 }
-
-
-// URL pattern for the /splash/list creative-cache refresh endpoint.
-// Returning plain "OK" prevents the client from retaining stale splash creatives.
+// Returning plain "OK" for /splash/list prevents stale splash creatives from being retained.
 const SPLASH_LIST_URL_PATTERN = /\/x\/v2\/splash\/list\?/;
 // For /splash/show and /splash/event/list2, clear only the target list and preserve session fields.
 const SPLASH_SHOW_EVENT_PATTERN = /\/x\/v2\/splash\/(?:show|event\/list2)\?/;
@@ -121,7 +115,7 @@ function getCachedTags(aid) {
 }
 
 // Save tags for an aid and return created, updated, unchanged, or skipped status.
-function saveCachedTags(aid, tags, title, options = {}) {
+function saveCachedTags(aid, tags, options = {}) {
   if (!aid || !tags.length) return { status: "skipped", tags: [] };
   const cache = readTagCache();
   const key = String(aid);
@@ -136,7 +130,6 @@ function saveCachedTags(aid, tags, title, options = {}) {
   cache.items = cache.items || {};
   cache.items[key] = {
     tags: nextTags,
-    title: title || cache.items[key]?.title || "",
     updatedAt: now,
   };
   tagCacheDirty = true;
@@ -162,7 +155,7 @@ async function ensureTagsForAid(aid, options = {}) {
   if (!pendingTagRequests[aid]) {
     pendingTagRequests[aid] = fetchArchiveTags(aid)
       .then((tags) => {
-        if (tags.length) saveCachedTags(aid, tags, "", { deferCacheWrite: true });
+        if (tags.length) saveCachedTags(aid, tags, { deferCacheWrite: true });
         return tags;
       })
       .catch((error) => {

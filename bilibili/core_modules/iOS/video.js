@@ -1,9 +1,5 @@
 // core_modules/iOS: iOS-specific ViewUnite detail and related-feed protobuf schema.
 
-/* -------------------------------------------------------------------------- */
-/* iOS ViewUnite video page                                                   */
-/* -------------------------------------------------------------------------- */
-
 // Extract the current video aid from an iOS ViewUnite response.
 function extractIosViewAidFromMessage(message) {
   try {
@@ -216,48 +212,10 @@ async function handleIosViewResponse() {
   const summary = videoCleanupSummary();
   let nextMessage = sanitizeIosVideoPageMessage(message, summary, { bannerFieldNo: 7 });
   nextMessage = await filterIosVideoRelatedMatches(nextMessage, summary, keywords);
-  const notifyPayload = videoViewNotifyPayload(summary);
-  if (notifyPayload.cleaned || notifyPayload.blocked) {
-    setResponseBodyBytes(encodeGrpcBody(nextMessage));
-  }
-
-  if (arg.deepFilter) {
-    const tags = collectTopicTags(nextMessage);
-    const aid = extractViewAidFromRequest() || extractIosViewAidFromMessage(nextMessage);
-    const cacheResult = saveCachedTags(aid, tags, "");
-    const cacheNotifyPayload = videoViewNotifyPayload(summary, cacheResult, aid);
-    log("info", {
-      platform: "iOS",
-      page: "view",
-      aid,
-      tags,
-      cacheStatus: cacheResult.status,
-      cleaned: cacheNotifyPayload.cleaned,
-      blocked: cacheNotifyPayload.blocked,
-      summary,
-    });
-    notifyCleanupAndFilter({
-      cleaned: cacheNotifyPayload.cleaned,
-      blocked: cacheNotifyPayload.blocked,
-      combined: cacheNotifyPayload,
-      cleanup: videoViewNotifyPayload(videoNotificationSummary(summary, "remove"), cacheResult, aid),
-      filter: videoViewNotifyPayload(videoNotificationSummary(summary, "filter"), cacheResult, aid),
-    });
-  } else {
-    log("info", {
-      platform: "iOS",
-      page: "view",
-      cleaned: notifyPayload.cleaned,
-      blocked: notifyPayload.blocked,
-      summary,
-    });
-    notifyCleanupAndFilter({
-      cleaned: notifyPayload.cleaned,
-      blocked: notifyPayload.blocked,
-      combined: notifyPayload,
-      cleanup: videoViewNotifyPayload(videoNotificationSummary(summary, "remove")),
-      filter: videoViewNotifyPayload(videoNotificationSummary(summary, "filter")),
-    });
-  }
-  finishResponse();
+  finishVideoViewResponse({
+    platform: "iOS",
+    message: nextMessage,
+    summary,
+    extractResponseAid: extractIosViewAidFromMessage,
+  });
 }

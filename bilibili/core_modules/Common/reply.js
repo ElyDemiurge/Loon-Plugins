@@ -1,7 +1,4 @@
 // core_modules/Common: reply-section cleanup shared by iOS and iPadOS.
-/* -------------------------------------------------------------------------- */
-/* Reply-section cleanup                                                      */
-/* -------------------------------------------------------------------------- */
 
 // Markers for pinned advertisement replies, including commercial links and ad payloads.
 const REPLY_AD_MARKER_PATTERN = /ad_cb|cm\.bilibili\.com\/ldad|googleapis\.com\/bilibili\.ad\.v1|SourceContentDto|schema_name":"ad|"ad_info"|reply_control"[^"]*ad/;

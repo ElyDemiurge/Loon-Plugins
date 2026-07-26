@@ -8,10 +8,6 @@ const {
   test,
 } = require("./test_context");
 
-/* -------------------------------------------------------------------------- */
-/* Popular page                                                               */
-/* -------------------------------------------------------------------------- */
-
 test("首页热门：未配置屏蔽规则时跳过 protobuf 解析并原样返回", async () => {
   const original = new Uint8Array([1, 2, 3]);
   const result = await runPlugin({

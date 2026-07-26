@@ -1,7 +1,4 @@
 // core_modules/Common: dynamic-page filtering and personalization shared by iOS and iPadOS.
-/* -------------------------------------------------------------------------- */
-/* Dynamic-page filtering and personalization                                 */
-/* -------------------------------------------------------------------------- */
 
 // Compact display text by removing zero-width characters and links, then truncate when needed.
 function compactDisplayText(value, maxLength = 48) {
@@ -256,8 +253,7 @@ function isDynamicUpListSection(bytes) {
   return names.length >= 3;
 }
 
-// Apply dynamicUpListMode to frequent-creator sections.
-// Hide removes the section, auto removes it only without live markers, and show preserves it.
+// Hide frequent creators, or in auto mode preserve them only when live markers exist.
 function sanitizeDynamicUpList(message, mode, summary) {
   summary.upListMode = mode;
   if (mode === "show") return message;

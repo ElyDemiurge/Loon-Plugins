@@ -1,7 +1,4 @@
 // core_modules/Common: shared video, related-feed, and search-result foundations.
-/* -------------------------------------------------------------------------- */
-/* Video pages, related feeds, and search results                             */
-/* -------------------------------------------------------------------------- */
 
 // Create video-page statistics grouped by cleanup type.
 function videoCleanupSummary() {
@@ -66,8 +63,7 @@ function extractReadableStrings(bytes) {
   ));
 }
 
-// Classify a video-page recommendation only when its cleanup switch is enabled.
-// Supported categories include banners, live cards, creator goods, promotions, and advertisements.
+// Classify enabled cleanup targets: banners, live cards, creator goods, promotions, and ads.
 function videoRelatedCleanupType(bytes, scope) {
   const text = decodeString(bytes);
 
@@ -151,6 +147,57 @@ function videoViewNotifyPayload(summary, cacheResult = null, aid = "") {
     cleaned,
     blocked,
   };
+}
+
+// Finalize a platform video-detail response and optionally update its tag cache.
+function finishVideoViewResponse({
+  platform,
+  endpoint = "",
+  message,
+  summary,
+  extractResponseAid,
+  kept,
+}) {
+  let aid = "";
+  let tags = [];
+  let cacheResult = null;
+  let combinedPayload = videoViewNotifyPayload(summary);
+
+  if (combinedPayload.cleaned || combinedPayload.blocked) {
+    setResponseBodyBytes(encodeGrpcBody(message));
+  }
+
+  if (arg.deepFilter) {
+    tags = collectTopicTags(message);
+    aid = extractViewAidFromRequest() || extractResponseAid(message);
+    cacheResult = saveCachedTags(aid, tags);
+    combinedPayload = videoViewNotifyPayload(summary, cacheResult, aid);
+  }
+
+  const logPayload = {
+    platform,
+    page: "view",
+  };
+  if (endpoint) logPayload.endpoint = endpoint;
+  if (kept !== undefined) logPayload.kept = kept;
+  if (cacheResult) {
+    logPayload.aid = aid;
+    logPayload.tags = tags;
+    logPayload.cacheStatus = cacheResult.status;
+  }
+  logPayload.cleaned = combinedPayload.cleaned;
+  logPayload.blocked = combinedPayload.blocked;
+  logPayload.summary = summary;
+  log("info", logPayload);
+
+  notifyCleanupAndFilter({
+    cleaned: combinedPayload.cleaned,
+    blocked: combinedPayload.blocked,
+    combined: combinedPayload,
+    cleanup: videoViewNotifyPayload(videoNotificationSummary(summary, "remove"), cacheResult, aid),
+    filter: videoViewNotifyPayload(videoNotificationSummary(summary, "filter"), cacheResult, aid),
+  });
+  finishResponse();
 }
 
 // Append a blocked related-video item to the summary.
@@ -502,8 +549,9 @@ function searchResultUpNames(bytes) {
     "23.14.2",
     "23.32",
   ];
-  return uniqueStrings(searchResultReadableEntries(bytes)
-    .filter((entry, _index, entries) =>
+  const entries = searchResultReadableEntries(bytes);
+  return uniqueStrings(entries
+    .filter((entry) =>
       upPaths.some((suffix) => pathEndsWith(entry.path, suffix)) ||
       (
         pathEndsWith(entry.path, "42.5.2") &&

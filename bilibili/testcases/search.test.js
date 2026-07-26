@@ -18,10 +18,6 @@ const {
   test,
 } = require("./test_context");
 
-/* -------------------------------------------------------------------------- */
-/* Home search                                                                */
-/* -------------------------------------------------------------------------- */
-
 test("首页搜索页面：默认移除热搜、搜索历史和搜索发现模块", async () => {
   const result = await runPlugin({
     url: "https://app.bilibili.com/x/v2/search/square?test=1",

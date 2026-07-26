@@ -10,10 +10,6 @@ const {
   test,
 } = require("./test_context");
 
-/* -------------------------------------------------------------------------- */
-/* Home-feed deep filtering                                                   */
-/* -------------------------------------------------------------------------- */
-
 test("首页推荐页：关闭推广视频清理开关时，带广告标记的视频推广卡片会保留", async () => {
   const result = await runPlugin({
     argument: notifyingArgument({ cleanFeedPromotedVideos: false }),
@@ -55,7 +51,7 @@ test("首页推荐页：深度 Tag 过滤会并发请求普通视频 Tag", async
       deepFilter: true,
       videoTagKeywords: "并发测试",
     }),
-    httpClientGet(request, callback) {
+    httpClientGet(_request, callback) {
       setTimeout(() => {
         callback(null, { status: 200 }, JSON.stringify({
           code: 0,
@@ -83,7 +79,7 @@ test("首页推荐页：深度 Tag 远端请求并发上限为 24", async () => 
       deepFilter: true,
       videoTagKeywords: "并发上限",
     }),
-    httpClientGet(request, callback) {
+    httpClientGet(_request, callback) {
       active += 1;
       maxActive = Math.max(maxActive, active);
       setTimeout(() => {
@@ -143,7 +139,7 @@ test("首页推荐页：深度 Tag 过滤按正则匹配视频 Tag", async () =>
       deepFilter: true,
       videoTagKeywords: "测试Tag\\d+",
     }),
-    httpClientGet(request, callback) {
+    httpClientGet(_request, callback) {
       callback(null, { status: 200 }, JSON.stringify({
         code: 0,
         data: [{ tag_name: "测试Tag1234" }],
@@ -162,7 +158,6 @@ test("首页推荐页：Tag 缓存命中时不再请求远端 Tag 接口", async
       aid,
       {
         tags: ["缓存命中"],
-        title: "",
         updatedAt: Date.now(),
       },
     ])),

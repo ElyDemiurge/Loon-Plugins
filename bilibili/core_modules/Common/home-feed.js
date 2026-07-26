@@ -1,7 +1,4 @@
 // core_modules/Common: home-feed and popular-page handling shared by iOS and iPadOS.
-/* -------------------------------------------------------------------------- */
-/* Home feed and popular page                                                 */
-/* -------------------------------------------------------------------------- */
 
 // Extract titles and creator names from a home-feed item.
 function extractHomeFeedItemText(item) {
@@ -72,12 +69,11 @@ async function filterHomeFeedIndex() {
   let cleanedAds = 0;
   let cleanedPromotedVideos = 0;
 
-  // These collections are used only for notifications and logs.
+  // Keep cleanup summaries separate from videos that still require blocking evaluation.
   const removedItems = [];
   const cleanedAdItems = [];
   const cleanedPromotedVideoItems = [];
 
-  // Rows contains regular videos that still need blocking-rule evaluation.
   const rows = [];
   const nextItems = [];
   for (const item of items) {

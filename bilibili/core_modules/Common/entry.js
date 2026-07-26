@@ -1,7 +1,4 @@
 // core_modules/Common: shared router dispatching to Common, iOS, and iPadOS handlers.
-/* -------------------------------------------------------------------------- */
-/* Route entry point                                                          */
-/* -------------------------------------------------------------------------- */
 
 // Dispatch a response by request URL and preserve unmatched responses unchanged.
 async function main() {

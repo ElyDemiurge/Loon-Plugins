@@ -1,9 +1,5 @@
 // core_modules/iPadOS: iPadOS-specific legacy View detail-page protobuf schema.
 
-/* -------------------------------------------------------------------------- */
-/* iPadOS legacy View video page                                              */
-/* -------------------------------------------------------------------------- */
-
 // Extract the current video aid from top-level field 1 of a legacy iPadOS View response.
 function extractIpadViewAidFromMessage(message) {
   try {
@@ -89,52 +85,12 @@ async function handleIpadViewResponse() {
   }
 
   const nextMessage = concat(chunks);
-  const notifyPayload = videoViewNotifyPayload(summary);
-  if (notifyPayload.cleaned || notifyPayload.blocked) {
-    setResponseBodyBytes(encodeGrpcBody(nextMessage));
-  }
-
-  if (arg.deepFilter) {
-    const tags = collectTopicTags(nextMessage);
-    const aid = extractViewAidFromRequest() || extractIpadViewAidFromMessage(nextMessage);
-    const cacheResult = saveCachedTags(aid, tags, "");
-    const cacheNotifyPayload = videoViewNotifyPayload(summary, cacheResult, aid);
-    log("info", {
-      platform: "iPadOS",
-      page: "view",
-      endpoint: "legacyView",
-      kept,
-      aid,
-      tags,
-      cacheStatus: cacheResult.status,
-      cleaned: cacheNotifyPayload.cleaned,
-      blocked: cacheNotifyPayload.blocked,
-      summary,
-    });
-    notifyCleanupAndFilter({
-      cleaned: cacheNotifyPayload.cleaned,
-      blocked: cacheNotifyPayload.blocked,
-      combined: cacheNotifyPayload,
-      cleanup: videoViewNotifyPayload(videoNotificationSummary(summary, "remove"), cacheResult, aid),
-      filter: videoViewNotifyPayload(videoNotificationSummary(summary, "filter"), cacheResult, aid),
-    });
-  } else {
-    log("info", {
-      platform: "iPadOS",
-      page: "view",
-      endpoint: "legacyView",
-      kept,
-      cleaned: notifyPayload.cleaned,
-      blocked: notifyPayload.blocked,
-      summary,
-    });
-    notifyCleanupAndFilter({
-      cleaned: notifyPayload.cleaned,
-      blocked: notifyPayload.blocked,
-      combined: notifyPayload,
-      cleanup: videoViewNotifyPayload(videoNotificationSummary(summary, "remove")),
-      filter: videoViewNotifyPayload(videoNotificationSummary(summary, "filter")),
-    });
-  }
-  finishResponse();
+  finishVideoViewResponse({
+    platform: "iPadOS",
+    endpoint: "legacyView",
+    message: nextMessage,
+    summary,
+    extractResponseAid: extractIpadViewAidFromMessage,
+    kept,
+  });
 }
