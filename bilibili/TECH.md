@@ -26,8 +26,8 @@
 
 | 全局对象 | 用途 |
 | --- | --- |
-| `$request` | 当前请求，包含 `url`、`body` 和 `bodyBytes` |
-| `$response` | 当前响应，包含 `body` 和 `bodyBytes`。请求阶段执行时不存在 |
+| `$request` | 当前请求，包含 `url` 和 `body`；兼容层也会尝试读取 `bodyBytes` 别名 |
+| `$response` | 当前响应；文本和二进制响应均从 `body` 读取，兼容层也支持测试环境的 `bodyBytes` 别名 |
 | `$argument` | 插件参数，可以是对象也可以是序列化字符串 |
 | `$persistentStore` | 持久化键值存储，用来存放 Tag 缓存 |
 | `$notification` / `$notify` | 发送系统通知 |
@@ -61,7 +61,7 @@
 | 12 | `core_modules/Common/mine.js` | 两端共用的「我的」页面统计与通知 |
 | 13 | `core_modules/iOS/mine.js` | iOS `sections_v2 / sections` 我的页面结构 |
 | 14 | `core_modules/iPadOS/mine.js` | iPadOS 独立入口数组的我的页面结构 |
-| 15 | `core_modules/iPadOS/ads.js` | iPadOS 大会员广告素材接口 |
+| 15 | `core_modules/iPadOS/ads.js` | iPadOS 大会员广告素材列表与登录浮层接口 |
 | 16 | `core_modules/Common/live-and-modes.js` | 直播广告、追踪参数、首页搜索页、青少年模式与交互式弹幕 |
 | 17 | `core_modules/Common/dynamic.js` | 动态关键词、UP 主推荐商品与「最常访问」列表 |
 | 18 | `core_modules/Common/home-feed.js` | iOS 与 iPadOS 共用的首页推荐页和首页热门过滤 |
@@ -90,7 +90,7 @@ node build_bilibili_cleaner.js --check
 
 ### JSON 响应
 
-首页推荐页、首页搜索页、开屏、启动资源、两端我的页面、iPadOS 大会员广告素材、视频推荐流（`feed/index/story`）等接口返回 JSON。具体步骤：
+首页推荐页、首页搜索页、开屏、启动资源、两端我的页面、iPadOS 大会员广告素材与登录浮层、视频推荐流（`feed/index/story`）等接口返回 JSON。具体步骤：
 
 1. `parseResponseJson()` 将响应体解析为对象。
 2. 遍历目标数组（比如 `data.items`、`data.tab`），按照规则标记哪些项要保留、哪些要移除。
@@ -170,9 +170,9 @@ Tag 匹配分三级，优先复用已有数据来减少网络请求：
 
 清理（移除广告、推广、直播等）和屏蔽（按关键词）是两类独立动作，分别统计、分别展示。
 
-### 视频页推荐流
+### 视频详情页与推荐流
 
-`videoRelatedCleanupType()` 按照字段特征判断一张推荐卡属于哪类清理，返回类型之前会检查对应开关是否开启：
+`videoRelatedCleanupType()` 按照字段特征判断一个视频页目标属于哪类清理，返回类型之前会检查对应开关是否开启：
 
 - `bannerAds`：横幅下载广告。
 - `liveRecommendations`：直播推荐。
@@ -200,7 +200,7 @@ iOS 的 `sanitizeIosVideoPageMessage()` 按 `ViewUnite` 字段位置（推荐流
 
 `notify()` 在发送之前先检查类别开关；开关开启时，通过 `logNotification()` 把即将弹出的通知内容同步写入脚本日志。关闭通知开关后不会生成对应的通知日志，常规诊断信息仍由 `log()` 按 `logLevel` 控制。
 
-规则内部名到用户可见文案的对照表统一放在 `BLOCK_RULE_LABELS` 中，这样通知、日志、测试都从同一处取值，不必各维护一份。`itemListMessage()` 等展示函数统一从该表取名称，列表型通知最多展示前 5 项。
+规则内部名到用户可见文案的对照表统一放在 `BLOCK_RULE_LABELS` 中，这样通知、日志、测试都从同一处取值，不必各维护一份。`itemListMessage()` 最多展示前 5 项；开屏和启动资源等专用通知由各自的展示函数限制条目数量。
 
 日志由 `log()` 按照等级输出，具体的等级定义见 `LogLevel`。低于 `logLevel` 的调用会被丢弃，生产环境默认 `warn`。
 
@@ -208,30 +208,30 @@ iOS 的 `sanitizeIosVideoPageMessage()` 按 `ViewUnite` 字段位置（推荐流
 
 - **结构缺失**：各处理器在响应数据不符合预期（比如缺少 `data`）时记录 info 日志并原样返回，不抛错。
 - **protobuf 解析**：`tryParseFields` 与多处 `try/catch` 保证局部解析失败不会中断整体流程。
-- **顶层兜底**：`main()` 外层 `.catch()` 捕获所有未处理异常，根据 URL 推断出页面名称后发送「脚本错误」通知，并通过 `$done({})` 原样放行上游响应。
+- **顶层兜底**：`main()` 外层 `.catch()` 捕获所有未处理异常，根据 URL 推断页面名称；启用 `notifyRemove` 或 `notifyFilter` 时发送「脚本错误」通知，随后通过 `$done({})` 原样放行上游响应。
 
 ## 接口与处理器对照表
 
 | URL 特征（正则片段） | 处理器 | 响应类型 | 说明 |
 | --- | --- | --- | --- |
-| `/x/v2/splash/(show\|list\|brand/list\|brand/show\|event/list\|event/list2\|ad/list\|topview/list)?` | `handleSplashResponse` | JSON | `/splash/list` 返回 `"OK"`（非 JSON）以阻止创意缓存刷新；`/splash/show`、`/splash/event/list2` 只清空 `show`/`event_list`（保留会话字段）；其余开屏端点清空广告数组 |
-| `/x/resource/(show/tab/v2\|show/skin\|peak/download)?` | `handleStartupAdsResponse` | JSON | 两端首页游戏按钮、启动活动 Tab、皮肤装扮和预加载资源；顶部分区过滤仅调用 iOS 模块，iPadOS 不使用该代码 |
-| `/x/v2/account/mine?` | `handleIosMinePageResponse` | JSON | iOS 我的页面模块 |
-| `/x/v2/account/mine/ipad?` | `handleIpadMinePageResponse` | JSON | iPadOS 创作中心与我的服务入口组 |
-| `/x/vip/ads/materials?` | `handleIpadVipAdsMaterialsResponse` | JSON | iPadOS 大会员广告素材与登录浮层，与两端启动推广共用 `cleanStartupAds` 开关 |
-| `/x/v2/search/square?` | `handleSearchSquareResponse` | JSON | 首页搜索页模块 |
+| `/x/v2/splash/(show\|list\|brand/list\|brand/show\|event/list\|event/list2\|ad/list\|topview/list)\?` | `handleSplashResponse` | JSON | `/splash/list` 返回 `"OK"`（非 JSON）以阻止创意缓存刷新；`/splash/show`、`/splash/event/list2` 只清空 `show`/`event_list`（保留会话字段）；其余开屏端点清空广告数组 |
+| `/x/resource/(show/tab/v2\|show/skin\|peak/download)\?` | `handleStartupAdsResponse` | JSON | 清理启动活动 Tab、皮肤装扮和预加载资源；`show/tab/v2` 还分别处理游戏按钮与底部按钮，顶部分区过滤仅调用 iOS 模块 |
+| `/x/v2/account/mine\?` | `handleIosMinePageResponse` | JSON | iOS 我的页面模块 |
+| `/x/v2/account/mine/ipad\?` | `handleIpadMinePageResponse` | JSON | iPadOS 创作中心与我的服务入口组 |
+| `/x/vip/ads/materials\?` | `handleIpadVipAdsMaterialsResponse` | JSON | iPadOS 专属处理器；与启动推广共用 `cleanStartupAds` 开关，清空 `data.list`、`data.list_v2` 并移除 `vip_login_coupon.login_layer`，保留其他字段 |
+| `/x/v2/search/square\?` | `handleSearchSquareResponse` | JSON | 首页搜索页模块 |
 | `bilibili.app.interface.v1.Search/DefaultWords` | `handleSearchDefaultWordsResponse` | gRPC | 搜索框滚动推荐词 |
 | `bilibili.app.interface.v1.Search/Suggest3` | `handleSearchSuggestResponse` | gRPC | 搜索候选词条 |
 | `bilibili.polymer.app.search.v1.Search/SearchAll` | `handleSearchAllResponse` | gRPC | 搜索结果 |
-| `/x/v2/feed/index/story?` | `handleVideoFeedIndex` | JSON | 视频推荐流（JSON 入口） |
-| `/x/v2/feed/index?` | `filterHomeFeedIndex` | JSON | 首页推荐页 |
-| `bilibili.app.viewunite.v1.View/View` | `handleIosViewResponse` | gRPC | iOS 视频详情页，同时负责 Tag 缓存 |
+| `/x/v2/feed/index/story\?` | `handleVideoFeedIndex` | JSON | 视频推荐流（JSON 入口） |
+| `/x/v2/feed/index\?` | `filterHomeFeedIndex` | JSON | 首页推荐页 |
+| `bilibili.app.viewunite.v1.View/View` | `handleIosViewResponse` | gRPC | iOS 视频详情页；开启深度屏蔽后缓存 Tag |
 | `bilibili.app.viewunite.v1.View/RelatesFeed` | `handleIosRelatesFeedResponse` | gRPC | iOS 视频页推荐流（gRPC 入口） |
-| `bilibili.app.view.v1.View/View` | `handleIpadViewResponse` | gRPC | iPadOS 旧版视频详情页、相关推荐与 Tag 缓存 |
+| `bilibili.app.view.v1.View/View` | `handleIpadViewResponse` | gRPC | iPadOS 旧版视频详情页与相关推荐；开启深度屏蔽后缓存 Tag |
 | `bilibili.app.dynamic.v2.Dynamic/DynAll` | `handleDynamicAllResponse` | gRPC | 动态页，同时控制「最常访问」列表是否显示 |
 | `bilibili.main.community.reply.v1.Reply/MainList` | `handleReplyMainListResponse` | gRPC | 评论区置顶广告 |
-| `api.live.bilibili.com/xlive/.../feed|getInfoByRoom|getInfoByUser|get_shopping_info` | `handleLiveAdsResponse` | JSON | 直播间信息流、房间页广告以及电商购物信息 |
-| `api.bilibili.com/x/pd-proxy/tracker` | `handlePdProxyTrackerResponse` | JSON | STUN/追踪服务器改写为失效地址 |
+| `api.live.bilibili.com/xlive/(.../feed\|getInfoByRoom\|getInfoByUser\|get_shopping_info)\?` | `handleLiveAdsResponse` | JSON | 直播间信息流、房间页广告以及电商购物信息 |
+| `api.bilibili.com/x/pd-proxy/tracker\?` | `handlePdProxyTrackerResponse` | JSON | STUN/追踪服务器改写为失效地址 |
 | `bilibili.app.interface.v1.Teenagers/ModeStatus` | `handleTeenagersResponse` | gRPC | 青少年模式关闭（mock 固定字节） |
 | `bilibili.app.(view.v1.View/TFInfo|viewunite.v1.View/(PlayPause|ViewEndPage))` | `handleInteractiveDanmakuResponse` | gRPC | 交互式弹幕清空（mock 固定字节） |
 | `bilibili.app.show.v1.Popular/Index` | `handleHomePopularIndex` | gRPC | 首页热门 |

@@ -4,8 +4,9 @@
 
 - 插件名称：比狸比狸过滤
 - 适用平台：iOS、iPadOS（系统版本不低于 15）
-- Loon 版本：不低于 3.4.0（需要启用 MitM-over-HTTP/2）
-- 涉及域名：`app.bilibili.com`、`grpc.biliapi.net`、`api.bilibili.com`、`api.live.bilibili.com`
+- Loon 版本：不低于 3.4.0(962)（需要启用 MitM-over-HTTP/2）
+- MitM 域名：`app.bilibili.com`、`grpc.biliapi.net`、`api.bilibili.com`、`api.live.bilibili.com`
+- 常开拦截域名：`api.biliapi.com`、`app.biliapi.com`、`api.biliapi.net`、`app.biliapi.net`，以及 `chat.bilibili.com` 下包含 `stun` 或 `tracker` 的请求
 
 > 本插件可能会与其他 Bilibili 插件的功能重叠并产生冲突，建议不要同时启用作用范围相同的插件。
 
@@ -17,22 +18,22 @@
 | --- | --- |
 | 开屏 | 清空开屏广告展示列表与素材缓存；`/splash/list` 直接返回 `OK` 阻断创意缓存刷新 |
 | 首页热门 | 按标题关键词、UP 主名称或视频 Tag 屏蔽视频卡片 |
-| 首页推荐页 | 按关键词与 Tag 屏蔽视频；移除广告与推广视频卡片 |
+| 首页推荐页 | 按标题关键词、UP 主名称或视频 Tag 屏蔽视频；移除广告与推广视频卡片 |
 | 首页搜索页 | 移除热搜、搜索历史、搜索发现模块；移除搜索框滚动推荐词 |
-| 搜索结果与候选词条 | 按关键词、UP 主或 Tag 屏蔽搜索结果；按关键词屏蔽输入联想候选项；移除广告、创作推广、直播与聚合卡片 |
+| 搜索结果与候选词条 | 按内容关键词屏蔽各类搜索结果；按标题关键词或视频 Tag 屏蔽普通视频，并按 UP 主名称屏蔽视频、用户和动态卡片；按关键词屏蔽输入联想候选项；移除广告、创作推广、直播与聚合卡片 |
 | 动态页 | 按关键词屏蔽整条动态；移除 UP 主推荐商品；控制「最常访问」列表的显示方式 |
-| 视频详情页 | iOS `ViewUnite` 与 iPadOS 旧版 `View` 分别按各自 protobuf 结构移除广告、直播推荐等内容，同时缓存视频 Tag |
-| 视频页推荐流 | 按关键词与 Tag 屏蔽；移除推广内容、广告、直播推荐卡片 |
+| 视频详情页 | iOS `ViewUnite` 与 iPadOS 旧版 `View` 分别按各自 protobuf 结构移除广告、视频页推荐流中的直播卡片等内容；开启深度屏蔽后缓存视频 Tag |
+| 视频页推荐流 | 按标题关键词、UP 主名称或视频 Tag 屏蔽；移除推广内容、广告与直播推荐卡片 |
 | 我的页面 | 分别识别 iOS 模块列表和 iPadOS 独立分组数组，按开关删除创作中心与我的服务 |
-| iPadOS 大会员广告 | 由两端共用的启动推广开关控制，清空 `/x/vip/ads/materials` 的广告素材列表与登录优惠浮层 |
+| iPadOS 大会员广告素材 | 与启动推广共用 `cleanStartupAds` 开关；清空 `/x/vip/ads/materials` 中的 `data.list`、`data.list_v2`，并移除 `vip_login_coupon.login_layer`，其他实验与上报字段保持不变 |
 | 评论区 | 移除置顶广告回复 |
 | 直播间 | 移除信息流与房间页广告；拦截直播电商购物信息 |
 | 青少年模式与交互式弹幕 | 关闭青少年模式弹窗；移除交互式弹幕 |
-| 数据上报与追踪 | 拦截 `biliapi` 上报域名以及 WebRTC stun 追踪；改写 `pd-proxy/tracker` 的 STUN 服务器 |
+| 数据上报与追踪 | 拦截 `biliapi` 上报域名以及 WebRTC STUN 追踪；改写 `pd-proxy/tracker` 的 STUN 服务器 |
 
-> 以上所有清理项都可以在插件参数中按需开关；`biliapi` 上报域名与 WebRTC stun 的拦截为常开（`[Rule]`，不受开关控制）。
+> 以上所有清理项都可以在插件参数中按需开关；`biliapi` 上报域名与 WebRTC STUN 的拦截为常开（`[Rule]`，不受开关控制）。
 
-屏蔽与清理的判定均发生在响应阶段，按命中规则改写后返回给客户端。当结果为空时，客户端的对应位置不会展示被移除的内容。
+除上述常开 `[Rule]` 外，其余屏蔽与清理均发生在响应阶段，按命中规则改写后返回给客户端。当结果为空时，客户端的对应位置不会展示被移除的内容。
 
 ## 安装
 
@@ -68,7 +69,7 @@ http://<局域网 IP>:8787/bilibili_cleaner.js?v=<版本号>
 | `titleKeywords` | 文本 | 空 | 视频标题关键词，标题中包含任一关键词的视频即被屏蔽。多个关键词可通过逗号、竖线、分号或换行来分隔 |
 | `blockedUps` | 文本 | 空 | UP 主名称，必须完全匹配才会屏蔽。多个名称同样以上述分隔符分隔 |
 
-> 关键词屏蔽作用于首页推荐页、首页热门、视频页推荐流和搜索结果视频等位置。
+> 标题与 UP 主屏蔽作用于首页推荐页、首页热门、视频页推荐流和搜索结果等位置；搜索结果中的标题和 Tag 仅匹配普通视频，UP 主名称还会匹配用户与动态卡片。
 
 ### 深度屏蔽
 
@@ -101,11 +102,11 @@ http://<局域网 IP>:8787/bilibili_cleaner.js?v=<版本号>
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
 | `cleanSplashAds` | 开启 | 清空开屏广告展示列表与素材缓存 |
-| `cleanStartupAds` | 开启 | 清理 iOS 与 iPadOS 的启动期活动 Tab、启动皮肤装扮和开屏预加载推广资源，同时清空 iPadOS 大会员广告素材与登录优惠浮层 |
+| `cleanStartupAds` | 开启 | 清理启动资源接口中的活动 Tab、启动皮肤装扮和开屏预加载推广资源；同一开关还会清空 iPadOS `/x/vip/ads/materials` 的广告素材列表并移除登录优惠浮层 |
 | `cleanFeedAds` | 开启 | 移除首页推荐页的横幅、非视频广告与非普通视频卡片 |
 | `cleanFeedPromotedVideos` | 开启 | 移除首页推荐页带广告标记的推广视频卡片 |
-| `cleanVideoRelatedPromotedContent` | 开启 | 移除视频详情页推荐流中的商业推广内容 |
-| `cleanVideoRelatedAds` | 开启 | 移除视频详情页推荐流中的普通广告卡片 |
+| `cleanVideoRelatedPromotedContent` | 开启 | 移除视频详情页中的商业推广内容 |
+| `cleanVideoRelatedAds` | 开启 | 移除视频详情页推荐流中的普通广告卡片，以及 iPadOS 旧版 `View` 中的独立广告素材 |
 | `cleanVideoBannerAds` | 开启 | 仅作用于 iOS；移除视频详情页中的横幅下载广告 |
 | `cleanVideoRelatedLiveRecommendations` | 开启 | 移除视频详情页推荐流中的直播推荐卡片 |
 | `cleanVideoUpGoodsAds` | 开启 | 仅作用于 iOS；移除视频详情页下方的 UP 主推荐好物 |
@@ -115,9 +116,9 @@ http://<局域网 IP>:8787/bilibili_cleaner.js?v=<版本号>
 | `cleanSearchResultAggregationCards` | 开启 | 移除搜索结果中的百科、官方入口等聚合卡片 |
 | `cleanTeenagersMode` | 开启 | 关闭青少年模式弹窗 |
 | `cleanInteractiveDanmaku` | 开启 | 移除视频交互式弹幕 |
-| `blockTrackers` | 开启 | 改写 `pd-proxy/tracker` 的 STUN/追踪服务器为失效地址（`biliapi` 上报域名与 WebRTC stun 拦截为常开，不受此开关控制） |
+| `blockTrackers` | 开启 | 改写 `pd-proxy/tracker` 的 STUN/追踪服务器为失效地址（`biliapi` 上报域名与 WebRTC STUN 拦截为常开，不受此开关控制） |
 | `cleanReplyTopAds` | 开启 | 移除评论区置顶的广告回复 |
-| `cleanLiveAds` | 开启 | 移除直播间信息流与房间页的广告卡片 |
+| `cleanLiveAds` | 开启 | 移除直播间信息流与房间页的广告卡片，并拦截直播电商购物信息 |
 | `cleanHomeGameButton` | 开启 | 移除首页右上角、消息按钮左侧的游戏中心按钮 |
 
 搜索结果页的清理规则按优先级判定，同一张卡片只会归入优先级最高的一类，不会重复计数。
@@ -132,10 +133,10 @@ http://<局域网 IP>:8787/bilibili_cleaner.js?v=<版本号>
 | `cleanSearchDiscovery` | 开启 | 移除首页搜索页的搜索发现模块 |
 | `cleanSearchDefaultWords` | 开启 | 移除首页搜索框内滚动的默认推荐词 |
 | `cleanHomeTopTabs` | 开启 | 仅精简 iOS 首页顶部分区，只保留直播、推荐和热门；iPadOS 不使用该过滤代码 |
-| `cleanBottomExtraButtons` | 开启 | 删除底部栏的加号与会员购按钮，保留首页、动态、我的等普通入口 |
+| `cleanBottomExtraButtons` | 开启 | 删除底部栏的发布或投稿入口（包括加号形式）与会员购按钮，保留首页、动态、我的等普通入口 |
 | `cleanMineCreationCenter` | 开启 | 删除 iOS 与 iPadOS 我的页面里的创作中心模块或入口组 |
 | `cleanMineServices` | 开启 | 删除 iOS 与 iPadOS 我的页面里的我的服务模块或入口组 |
-| `dynamicUpListDisplay` | show | 动态页「最常访问」UP 列表的显示方式。可选：仅存在直播时显示、始终显示、始终隐藏 |
+| `dynamicUpListDisplay` | 始终显示 | 动态页「最常访问」UP 列表的显示方式。可选：仅存在直播时显示、始终显示、始终隐藏 |
 
 ### 调试与日志
 
